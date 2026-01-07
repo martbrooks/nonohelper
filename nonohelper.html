@@ -15,6 +15,14 @@
     max-width: 1000px;
     margin: 20px auto;
     padding: 0 16px 40px;
+    background: #111;
+    color: #eee;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  body[data-theme="light"] {
+    background: #f4f4f8;
+    color: #222;
   }
 
   h1 {
@@ -24,12 +32,20 @@
 
   /* Controls */
 
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
   .controls {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
     align-items: center;
-    margin-bottom: 8px;
   }
 
   .controls label {
@@ -41,17 +57,36 @@
     padding: 3px 6px;
   }
 
+  .theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+  }
+
+  .theme-toggle label {
+    cursor: pointer;
+  }
+
   button {
     padding: 6px 12px;
     border-radius: 6px;
-    border: 1px solid #ccc;
-    background: #f4f4f4;
+    border: 1px solid #666;
+    background: #333;
+    color: #f5f5f5;
     cursor: pointer;
     font-size: 0.95rem;
+    transition: background 0.1s ease, filter 0.1s ease, border-color 0.1s ease;
   }
 
   button:hover {
-    filter: brightness(1.05);
+    filter: brightness(1.1);
+  }
+
+  body[data-theme="light"] button {
+    background: #f4f4f4;
+    color: #222;
+    border-color: #bbb;
   }
 
   .mode-select {
@@ -67,7 +102,7 @@
     cursor: pointer;
   }
 
-  /* Board structure */
+  /* Board */
 
   .board-wrapper {
     overflow: visible;
@@ -112,10 +147,15 @@
   .number-col > div {
     font-size: 12px;
     text-align: center;
-    color: #444;
     line-height: var(--cell-size);
     width: var(--cell-size);
     height: var(--cell-size);
+    color: #ccc;
+  }
+
+  body[data-theme="light"] .number-row > div,
+  body[data-theme="light"] .number-col > div {
+    color: #444;
   }
 
   .grid {
@@ -127,11 +167,12 @@
     height: var(--cell-size);
     box-sizing: border-box;
     border: 1px solid #ccc;
-    background: #fff;
+    background: #fff; /* grid stays white in both themes */
     font-size: 16px;
     line-height: var(--cell-size);
     text-align: center;
     cursor: pointer;
+    position: relative;
   }
 
   .cell.filled {
@@ -139,12 +180,26 @@
     color: #000;
   }
 
+  /* Bold centred red cross */
+
   .cell.cross {
     background: #fff;
-    color: #c00;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  /* Tooltip showing selection dimensions */
+  .cell.cross::after {
+    content: "×";
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+    transform: scale(1.6);
+    color: #c00;
+    pointer-events: none;
+  }
+
+  /* Tooltip */
 
   .selection-tooltip {
     position: fixed;
@@ -159,20 +214,28 @@
   }
 </style>
 </head>
-<body>
+<body data-theme="dark">
 
 <h1>Nonogram Scratchpad</h1>
 
-<div class="controls">
-  <label>
-    Columns (width):
-    <input type="number" id="colsInput" min="5" max="50" step="5" value="25">
-  </label>
-  <label>
-    Rows (height):
-    <input type="number" id="rowsInput" min="5" max="50" step="5" value="25">
-  </label>
-  <button id="buildGridBtn">Create / reset grid</button>
+<div class="top-bar">
+  <div class="controls">
+    <label>
+      Columns (width):
+      <input type="number" id="colsInput" min="5" max="50" step="5" value="25">
+    </label>
+    <label>
+      Rows (height):
+      <input type="number" id="rowsInput" min="5" max="50" step="5" value="25">
+    </label>
+    <button id="buildGridBtn">Create / reset grid</button>
+  </div>
+
+  <div class="theme-toggle">
+    <span>Theme:</span>
+    <label><input type="radio" name="theme" value="dark" checked> Dark</label>
+    <label><input type="radio" name="theme" value="light"> Light</label>
+  </div>
 </div>
 
 <div class="mode-select">
@@ -207,22 +270,22 @@
 </div>
 
 <script>
-  // === Config ===
+  /* CONFIG */
 
   const MIN_SIZE = 5;
   const MAX_SIZE = 50;
   const STEP_SIZE = 5;
   const MIN_ZOOM = 0.4;
   const MAX_ZOOM = 3.0;
-  const ZOOM_IN_FACTOR = 1.1;
-  const ZOOM_OUT_FACTOR = 0.9;
+  const ZOOM_IN = 1.1;
+  const ZOOM_OUT = 0.9;
 
-  // === DOM references ===
+  /* DOM REFS */
 
-  const gridElement   = document.getElementById("grid");
-  const colsInput     = document.getElementById("colsInput");
-  const rowsInput     = document.getElementById("rowsInput");
-  const buildGridBtn  = document.getElementById("buildGridBtn");
+  const gridElement = document.getElementById("grid");
+  const colsInput   = document.getElementById("colsInput");
+  const rowsInput   = document.getElementById("rowsInput");
+  const buildBtn    = document.getElementById("buildGridBtn");
 
   const topNums    = document.getElementById("topNums");
   const bottomNums = document.getElementById("bottomNums");
@@ -232,86 +295,84 @@
   const boardRoot    = document.getElementById("boardRoot");
   const boardWrapper = document.getElementById("boardWrapper");
 
+  const themeRadios = document.querySelectorAll('input[name="theme"]');
+
   const tooltip = document.createElement("div");
   tooltip.className = "selection-tooltip";
   document.body.appendChild(tooltip);
 
-  // === State ===
+  /* STATE */
 
   const state = {
-    selectionMode: "line",  // "line" | "rect" | "free"
+    selectionMode: "line",
     isMouseDown: false,
     dragStartRow: null,
     dragStartCol: null,
-    dragButton: null,       // 0 = left, 2 = right
-    dragTargetState: null,  // "empty" | "filled" | "cross"
+    dragButton: null,
+    dragTargetState: null,
     cols: 25,
     rows: 25,
-    originalStates: null,   // snapshot for line/rect
+    originalStates: null,
     zoom: 1
   };
 
-  // === Utility functions ===
+  /* HELPERS */
 
-  function normaliseDimension(value) {
-    let n = parseInt(value, 10);
+  function clampGridSize(n) {
+    n = parseInt(n, 10);
     if (isNaN(n)) n = 25;
     n = Math.max(MIN_SIZE, Math.min(MAX_SIZE, n));
     n = Math.round(n / STEP_SIZE) * STEP_SIZE;
     return n;
   }
 
-  function getCellState(cell) {
+  function getState(cell) {
     return cell.dataset.state || "empty";
   }
 
-  function setCellState(cell, newState) {
-    cell.dataset.state = newState;
+  function setState(cell, st) {
+    cell.dataset.state = st;
     cell.classList.remove("filled", "cross");
-    cell.textContent = "";
 
-    if (newState === "filled") {
+    if (st === "filled") {
       cell.classList.add("filled");
-    } else if (newState === "cross") {
+    }
+    if (st === "cross") {
       cell.classList.add("cross");
-      cell.textContent = "×";
     }
   }
 
-  function nextStateLeftClick(current) {
-    if (current === "empty") return "filled";
-    if (current === "filled") return "cross";
+  function nextLeft(st) {
+    if (st === "empty") return "filled";
+    if (st === "filled") return "cross";
     return "empty";
   }
 
-  function nextStateRightClick(current) {
-    if (current === "empty") return "cross";
-    if (current === "cross") return "filled";
+  function nextRight(st) {
+    if (st === "empty") return "cross";
+    if (st === "cross") return "filled";
     return "empty";
   }
 
-  function indexFromRowCol(row, col) {
-    return row * state.cols + col;
+  function idx(r, c) {
+    return r * state.cols + c;
   }
 
-  function snapshotGrid() {
-    state.originalStates = Array.from(gridElement.children, cell => cell.dataset.state || "empty");
+  function snapshot() {
+    state.originalStates = Array.from(gridElement.children, c => c.dataset.state);
   }
 
-  function restoreGridFromSnapshot() {
+  function restore() {
     if (!state.originalStates) return;
-    const cells = gridElement.children;
-    for (let i = 0; i < state.originalStates.length; i++) {
-      setCellState(cells[i], state.originalStates[i]);
-    }
+    gridElement.childNodes.forEach((cell, i) => {
+      setState(cell, state.originalStates[i]);
+    });
   }
-
-  // === Tooltip ===
 
   function showTooltip(text, x, y) {
     tooltip.textContent = text;
     tooltip.style.left = (x + 12) + "px";
-    tooltip.style.top = (y + 12) + "px";
+    tooltip.style.top  = (y + 12) + "px";
     tooltip.style.display = "block";
   }
 
@@ -319,66 +380,51 @@
     tooltip.style.display = "none";
   }
 
-  // === Zoom ===
-
   function applyZoom() {
     boardRoot.style.transform = `scale(${state.zoom})`;
   }
 
-  function handleZoomWheel(event) {
-    const isZoomGesture = event.ctrlKey || event.metaKey;
-    if (!isZoomGesture) return;
-
-    event.preventDefault();
-
-    const delta = event.deltaY || 0;
-    const factor = delta < 0 ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
-
-    state.zoom *= factor;
-    state.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, state.zoom));
-
-    applyZoom();
+  function setTheme(mode) {
+    document.body.setAttribute("data-theme", mode);
   }
 
-  // === Grid building ===
+  /* GRID BUILDING */
 
-  function buildNumberRow(container, count) {
+  function buildNumbersRow(container, count) {
     container.innerHTML = "";
     container.style.gridTemplateColumns = `repeat(${count}, var(--cell-size))`;
     for (let i = 1; i <= count; i++) {
-      const cell = document.createElement("div");
-      cell.textContent = i;
-      container.appendChild(cell);
+      const n = document.createElement("div");
+      n.textContent = i;
+      container.appendChild(n);
     }
   }
 
-  function buildNumberCol(container, count) {
+  function buildNumbersCol(container, count) {
     container.innerHTML = "";
     container.style.gridTemplateRows = `repeat(${count}, var(--cell-size))`;
     for (let i = 1; i <= count; i++) {
-      const cell = document.createElement("div");
-      cell.textContent = i;
-      container.appendChild(cell);
+      const n = document.createElement("div");
+      n.textContent = i;
+      container.appendChild(n);
     }
   }
 
   function buildGrid() {
-    const cols = normaliseDimension(colsInput.value);
-    const rows = normaliseDimension(rowsInput.value);
+    const cols = clampGridSize(colsInput.value);
+    const rows = clampGridSize(rowsInput.value);
 
-    // Persist normalised values
     colsInput.value = cols;
     rowsInput.value = rows;
+
     state.cols = cols;
     state.rows = rows;
 
-    // Numbering
-    buildNumberRow(topNums, cols);
-    buildNumberRow(bottomNums, cols);
-    buildNumberCol(leftNums, rows);
-    buildNumberCol(rightNums, rows);
+    buildNumbersRow(topNums, cols);
+    buildNumbersRow(bottomNums, cols);
+    buildNumbersCol(leftNums, rows);
+    buildNumbersCol(rightNums, rows);
 
-    // Main grid
     gridElement.innerHTML = "";
     gridElement.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
 
@@ -387,57 +433,44 @@
         const cell = document.createElement("div");
         cell.className = "cell";
         cell.dataset.state = "empty";
-        cell.dataset.row = String(r);
-        cell.dataset.col = String(c);
+        cell.dataset.row = r;
+        cell.dataset.col = c;
 
-        // Border widths for 5x5 blocks and outer edge
-        const topWidth =
-          r === 0 ? 3 :
-          r % 5 === 0 ? 2 : 1;
-        const leftWidth =
-          c === 0 ? 3 :
-          c % 5 === 0 ? 2 : 1;
-        const bottomWidth =
-          r === rows - 1 ? 3 :
-          (r + 1) % 5 === 0 ? 2 : 1;
-        const rightWidth =
-          c === cols - 1 ? 3 :
-          (c + 1) % 5 === 0 ? 2 : 1;
+        const t  = r === 0 ? 3 : r % 5 === 0 ? 2 : 1;
+        const l  = c === 0 ? 3 : c % 5 === 0 ? 2 : 1;
+        const b  = r === rows - 1 ? 3 : (r + 1) % 5 === 0 ? 2 : 1;
+        const rt = c === cols - 1 ? 3 : (c + 1) % 5 === 0 ? 2 : 1;
 
-        cell.style.borderTopWidth = topWidth + "px";
-        cell.style.borderLeftWidth = leftWidth + "px";
-        cell.style.borderBottomWidth = bottomWidth + "px";
-        cell.style.borderRightWidth = rightWidth + "px";
+        cell.style.borderTopWidth    = t  + "px";
+        cell.style.borderLeftWidth   = l  + "px";
+        cell.style.borderBottomWidth = b  + "px";
+        cell.style.borderRightWidth  = rt + "px";
 
-        cell.addEventListener("mousedown", onCellMouseDown);
-        cell.addEventListener("mouseenter", onCellMouseEnter);
+        cell.addEventListener("mousedown", cellMouseDown);
+        cell.addEventListener("mouseenter", cellMouseEnter);
 
         gridElement.appendChild(cell);
       }
     }
   }
 
-  // === Drawing helpers ===
+  /* DRAWING */
 
   function drawLineTo(row, col) {
     const dr = row - state.dragStartRow;
     const dc = col - state.dragStartCol;
 
     if (Math.abs(dr) >= Math.abs(dc)) {
-      // Vertical line
       const r1 = Math.min(state.dragStartRow, row);
       const r2 = Math.max(state.dragStartRow, row);
       for (let r = r1; r <= r2; r++) {
-        const idx = indexFromRowCol(r, state.dragStartCol);
-        setCellState(gridElement.children[idx], state.dragTargetState);
+        setState(gridElement.children[idx(r, state.dragStartCol)], state.dragTargetState);
       }
     } else {
-      // Horizontal line
       const c1 = Math.min(state.dragStartCol, col);
       const c2 = Math.max(state.dragStartCol, col);
       for (let c = c1; c <= c2; c++) {
-        const idx = indexFromRowCol(state.dragStartRow, c);
-        setCellState(gridElement.children[idx], state.dragTargetState);
+        setState(gridElement.children[idx(state.dragStartRow, c)], state.dragTargetState);
       }
     }
   }
@@ -450,30 +483,27 @@
 
     for (let r = r1; r <= r2; r++) {
       for (let c = c1; c <= c2; c++) {
-        const idx = indexFromRowCol(r, c);
-        setCellState(gridElement.children[idx], state.dragTargetState);
+        setState(gridElement.children[idx(r, c)], state.dragTargetState);
       }
     }
   }
 
-  // === Event handlers: cells ===
+  /* CELL EVENTS */
 
-  function onCellMouseDown(event) {
-    if (event.button !== 0 && event.button !== 2) return; // left / right only
+  function cellMouseDown(event) {
+    if (event.button !== 0 && event.button !== 2) return;
 
     event.preventDefault();
     hideTooltip();
 
     const cell = event.currentTarget;
-    const row = Number(cell.dataset.row);
-    const col = Number(cell.dataset.col);
+    const row  = Number(cell.dataset.row);
+    const col  = Number(cell.dataset.col);
 
-    const current = getCellState(cell);
-    const next = event.button === 0
-      ? nextStateLeftClick(current)
-      : nextStateRightClick(current);
+    const current = getState(cell);
+    const next = event.button === 0 ? nextLeft(current) : nextRight(current);
 
-    setCellState(cell, next);
+    setState(cell, next);
 
     state.isMouseDown = true;
     state.dragButton = event.button;
@@ -481,33 +511,29 @@
     state.dragStartCol = col;
     state.dragTargetState = next;
 
-    if (state.selectionMode === "free") {
+    if (state.selectionMode !== "free") {
+      snapshot();
+      showTooltip("1x1", event.clientX, event.clientY);
+    } else {
       state.originalStates = null;
-      return;
     }
-
-    snapshotGrid();
-    showTooltip("1x1", event.clientX, event.clientY);
   }
 
-  function onCellMouseEnter(event) {
+  function cellMouseEnter(event) {
     if (!state.isMouseDown) return;
 
     const cell = event.currentTarget;
-    const row = Number(cell.dataset.row);
-    const col = Number(cell.dataset.col);
+    const row  = Number(cell.dataset.row);
+    const col  = Number(cell.dataset.col);
 
     if (state.selectionMode === "free") {
-      const cur = getCellState(cell);
-      const next = state.dragButton === 0
-        ? nextStateLeftClick(cur)
-        : nextStateRightClick(cur);
-      setCellState(cell, next);
+      const cur = getState(cell);
+      const next = state.dragButton === 0 ? nextLeft(cur) : nextRight(cur);
+      setState(cell, next);
       return;
     }
 
-    // line / rect: restore then redraw current selection
-    restoreGridFromSnapshot();
+    restore();
     if (state.selectionMode === "line") {
       drawLineTo(row, col);
     } else if (state.selectionMode === "rect") {
@@ -515,7 +541,7 @@
     }
   }
 
-  // === Event handlers: dimension tooltip ===
+  /* TOOLTIP FOLLOW */
 
   gridElement.addEventListener("mousemove", (event) => {
     if (!state.isMouseDown || state.selectionMode === "free") {
@@ -536,11 +562,9 @@
       const dr = row - state.dragStartRow;
       const dc = col - state.dragStartCol;
       if (Math.abs(dr) >= Math.abs(dc)) {
-        // vertical line
         width = 1;
         height = Math.abs(dr) + 1;
       } else {
-        // horizontal line
         width = Math.abs(dc) + 1;
         height = 1;
       }
@@ -549,7 +573,7 @@
     showTooltip(`${width}x${height}`, event.clientX, event.clientY);
   });
 
-  // === Global handlers ===
+  /* GLOBAL EVENTS */
 
   document.addEventListener("mouseup", () => {
     state.isMouseDown = false;
@@ -561,30 +585,48 @@
     hideTooltip();
   });
 
-  gridElement.addEventListener("contextmenu", (event) => {
+  gridElement.addEventListener("contextmenu", e => e.preventDefault());
+
+  // Zoom: Ctrl (Win/Linux) or Cmd (macOS) + wheel
+  boardWrapper.addEventListener("wheel", (event) => {
+    const isZoomGesture = event.ctrlKey || event.metaKey;
+    if (!isZoomGesture) return;
+
     event.preventDefault();
-  });
+    const delta = event.deltaY;
+    state.zoom *= delta < 0 ? ZOOM_IN : ZOOM_OUT;
+    state.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, state.zoom));
+    applyZoom();
+  }, { passive: false });
 
-  // Zoom: Ctrl (Win/Linux) or Command (macOS) + wheel
-  boardWrapper.addEventListener("wheel", handleZoomWheel, { passive: false });
-
-  // Mode selector
+  // Mode switching
   document.querySelectorAll('input[name="mode"]').forEach(radio => {
     radio.addEventListener("change", () => {
-      if (!radio.checked) return;
-      state.selectionMode = radio.value;
-      if (state.selectionMode === "free") hideTooltip();
+      if (radio.checked) {
+        state.selectionMode = radio.value;
+        if (state.selectionMode === "free") hideTooltip();
+      }
     });
   });
 
-  // Create / reset grid button
-  buildGridBtn.addEventListener("click", () => {
+  // Theme switching
+  themeRadios.forEach(radio => {
+    radio.addEventListener("change", () => {
+      if (radio.checked) {
+        setTheme(radio.value);
+      }
+    });
+  });
+
+  // Build/reset
+  buildBtn.addEventListener("click", () => {
     hideTooltip();
     buildGrid();
   });
 
-  // === Initialisation ===
+  /* INIT */
 
+  setTheme("dark"); // default
   buildGrid();
   applyZoom();
 </script>
