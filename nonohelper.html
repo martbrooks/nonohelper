@@ -129,7 +129,6 @@
     flex-direction: column;
     gap: 4px;
     user-select: none;
-    transform-origin: top left;
   }
 
   .top-row,
@@ -323,6 +322,7 @@
    CONSTANTS & CONFIG
    ===================================================================== */
 
+const BASE_CELL_SIZE = 22;   // px, matches initial --cell-size
 const MIN_SIZE   = 5;
 const MAX_SIZE   = 50;
 const STEP_SIZE  = 5;
@@ -489,7 +489,8 @@ function hideTooltip() {
 }
 
 function applyZoom() {
-  boardRoot.style.transform = `scale(${state.zoom})`;
+  const newSize = BASE_CELL_SIZE * state.zoom;
+  document.documentElement.style.setProperty("--cell-size", `${newSize}px`);
 }
 
 function setTheme(mode) {
