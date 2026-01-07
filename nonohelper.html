@@ -166,7 +166,7 @@
     width: var(--cell-size);
     height: var(--cell-size);
     box-sizing: border-box;
-    border: 1px solid #000;                 /* grid lines now black */
+    border: 1px solid #000;                 /* grid lines */
     background: rgb(218,210,192);           /* grid background colour */
     font-size: 16px;
     line-height: var(--cell-size);
@@ -178,8 +178,8 @@
   .cell.filled {
     background: #000;
     color: #000;
-    /* Thin inner outline so black squares do not hide the grid */
-    box-shadow: inset 0 0 0 1px #555;
+    /* Thicker inner outline, matching grid background colour */
+    box-shadow: inset 0 0 0 2px rgb(218,210,192);
   }
 
   /* Bold centred red cross */
