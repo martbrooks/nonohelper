@@ -8,6 +8,8 @@
   :root {
     --cell-size: 22px;
     --grid-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --grid-bg: rgb(218,210,192);
+    --dark-bg: rgb(29,31,33);
   }
 
   body {
@@ -15,7 +17,7 @@
     max-width: 1000px;
     margin: 20px auto;
     padding: 0 16px 40px;
-    background: rgb(29,31,33); /* dark mode background */
+    background: var(--dark-bg);
     color: #eee;
     transition: background 0.15s ease, color 0.15s ease;
   }
@@ -166,8 +168,8 @@
     width: var(--cell-size);
     height: var(--cell-size);
     box-sizing: border-box;
-    border: 1px solid #000;                 /* grid lines */
-    background: rgb(218,210,192);           /* grid background colour */
+    border: 1px solid #000;     /* black grid lines */
+    background: var(--grid-bg); /* grid background colour */
     font-size: 16px;
     line-height: var(--cell-size);
     text-align: center;
@@ -178,14 +180,12 @@
   .cell.filled {
     background: #000;
     color: #000;
-    /* Thicker inner outline, matching grid background colour */
-    box-shadow: inset 0 0 0 2px rgb(218,210,192);
+    /* Inner outline matching grid background to preserve grid look */
+    box-shadow: inset 0 0 0 2px var(--grid-bg);
   }
 
-  /* Bold centred red cross */
-
   .cell.cross {
-    background: rgb(218,210,192);
+    background: var(--grid-bg);
   }
 
   .cell.cross::after {
@@ -272,41 +272,59 @@
 </div>
 
 <script>
-  /* CONFIG */
+  // -------------------------------------------------------------------
+  // Config and constants
+  // -------------------------------------------------------------------
 
-  const MIN_SIZE = 5;
-  const MAX_SIZE = 50;
-  const STEP_SIZE = 5;
-  const MIN_ZOOM = 0.4;
-  const MAX_ZOOM = 3.0;
-  const ZOOM_IN = 1.1;
-  const ZOOM_OUT = 0.9;
+  const MIN_SIZE     = 5;
+  const MAX_SIZE     = 50;
+  const STEP_SIZE    = 5;
+  const MIN_ZOOM     = 0.4;
+  const MAX_ZOOM     = 3.0;
+  const ZOOM_IN_F    = 1.1;
+  const ZOOM_OUT_F   = 0.9;
 
-  /* DOM REFS */
+  const MODE_LINE = "line";
+  const MODE_RECT = "rect";
+  const MODE_FREE = "free";
 
-  const gridElement = document.getElementById("grid");
-  const colsInput   = document.getElementById("colsInput");
-  const rowsInput   = document.getElementById("rowsInput");
-  const buildBtn    = document.getElementById("buildGridBtn");
+  const BUTTON_LEFT  = 0;
+  const BUTTON_RIGHT = 2;
 
-  const topNums    = document.getElementById("topNums");
-  const bottomNums = document.getElementById("bottomNums");
-  const leftNums   = document.getElementById("leftNums");
-  const rightNums  = document.getElementById("rightNums");
+  const STATE_EMPTY  = "empty";
+  const STATE_FILLED = "filled";
+  const STATE_CROSS  = "cross";
+
+  // -------------------------------------------------------------------
+  // DOM references
+  // -------------------------------------------------------------------
+
+  const gridElement  = document.getElementById("grid");
+  const colsInput    = document.getElementById("colsInput");
+  const rowsInput    = document.getElementById("rowsInput");
+  const buildBtn     = document.getElementById("buildGridBtn");
+
+  const topNums      = document.getElementById("topNums");
+  const bottomNums   = document.getElementById("bottomNums");
+  const leftNums     = document.getElementById("leftNums");
+  const rightNums    = document.getElementById("rightNums");
 
   const boardRoot    = document.getElementById("boardRoot");
   const boardWrapper = document.getElementById("boardWrapper");
 
-  const themeRadios = document.querySelectorAll('input[name="theme"]');
+  const themeRadios  = document.querySelectorAll('input[name="theme"]');
+  const modeRadios   = document.querySelectorAll('input[name="mode"]');
 
-  const tooltip = document.createElement("div");
-  tooltip.className = "selection-tooltip";
+  const tooltip      = document.createElement("div");
+  tooltip.className  = "selection-tooltip";
   document.body.appendChild(tooltip);
 
-  /* STATE */
+  // -------------------------------------------------------------------
+  // State
+  // -------------------------------------------------------------------
 
   const state = {
-    selectionMode: "rect",  // default to rectangle
+    selectionMode: MODE_RECT,
     isMouseDown: false,
     dragStartRow: null,
     dragStartCol: null,
@@ -318,63 +336,77 @@
     zoom: 1
   };
 
-  /* HELPERS */
+  // -------------------------------------------------------------------
+  // Helper functions
+  // -------------------------------------------------------------------
 
-  function clampGridSize(n) {
-    n = parseInt(n, 10);
+  function clampGridSize(value) {
+    let n = parseInt(value, 10);
     if (isNaN(n)) n = 25;
     n = Math.max(MIN_SIZE, Math.min(MAX_SIZE, n));
     n = Math.round(n / STEP_SIZE) * STEP_SIZE;
     return n;
   }
 
-  function getState(cell) {
-    return cell.dataset.state || "empty";
+  function getCellState(cell) {
+    return cell.dataset.state || STATE_EMPTY;
   }
 
-  function setState(cell, st) {
-    cell.dataset.state = st;
+  function setCellState(cell, newState) {
+    cell.dataset.state = newState;
     cell.classList.remove("filled", "cross");
 
-    if (st === "filled") {
+    if (newState === STATE_FILLED) {
       cell.classList.add("filled");
-    }
-    if (st === "cross") {
+    } else if (newState === STATE_CROSS) {
       cell.classList.add("cross");
     }
   }
 
-  function nextLeft(st) {
-    if (st === "empty") return "filled";
-    if (st === "filled") return "cross";
-    return "empty";
+  function nextStateLeft(current) {
+    if (current === STATE_EMPTY)  return STATE_FILLED;
+    if (current === STATE_FILLED) return STATE_CROSS;
+    return STATE_EMPTY;
   }
 
-  function nextRight(st) {
-    if (st === "empty") return "cross";
-    if (st === "cross") return "filled";
-    return "empty";
+  function nextStateRight(current) {
+    if (current === STATE_EMPTY)  return STATE_CROSS;
+    if (current === STATE_CROSS)  return STATE_FILLED;
+    return STATE_EMPTY;
   }
 
-  function idx(r, c) {
-    return r * state.cols + c;
+  function indexFromRowCol(row, col) {
+    return row * state.cols + col;
   }
 
-  function snapshot() {
-    state.originalStates = Array.from(gridElement.children, c => c.dataset.state);
+  function forEachCell(callback) {
+    const cells = gridElement.children;
+    for (let i = 0; i < cells.length; i++) {
+      callback(cells[i], i);
+    }
   }
 
-  function restore() {
+  function snapshotGrid() {
+    const cells = gridElement.children;
+    state.originalStates = new Array(cells.length);
+    for (let i = 0; i < cells.length; i++) {
+      state.originalStates[i] = cells[i].dataset.state || STATE_EMPTY;
+    }
+  }
+
+  function restoreGridFromSnapshot() {
     if (!state.originalStates) return;
-    gridElement.childNodes.forEach((cell, i) => {
-      setState(cell, state.originalStates[i]);
-    });
+    const cells = gridElement.children;
+    if (cells.length !== state.originalStates.length) return;
+    for (let i = 0; i < cells.length; i++) {
+      setCellState(cells[i], state.originalStates[i]);
+    }
   }
 
   function showTooltip(text, x, y) {
     tooltip.textContent = text;
-    tooltip.style.left = (x + 12) + "px";
-    tooltip.style.top  = (y + 12) + "px";
+    tooltip.style.left  = (x + 12) + "px";
+    tooltip.style.top   = (y + 12) + "px";
     tooltip.style.display = "block";
   }
 
@@ -390,27 +422,39 @@
     document.body.setAttribute("data-theme", mode);
   }
 
-  /* GRID BUILDING */
+  function getDragSize(row, col) {
+    const width  = Math.abs(col - state.dragStartCol) + 1;
+    const height = Math.abs(row - state.dragStartRow) + 1;
+    return { width, height };
+  }
 
-  function buildNumbersRow(container, count) {
+  // -------------------------------------------------------------------
+  // Number strips
+  // -------------------------------------------------------------------
+
+  function buildNumberRow(container, count) {
     container.innerHTML = "";
     container.style.gridTemplateColumns = `repeat(${count}, var(--cell-size))`;
     for (let i = 1; i <= count; i++) {
-      const n = document.createElement("div");
-      n.textContent = i;
-      container.appendChild(n);
+      const div = document.createElement("div");
+      div.textContent = i;
+      container.appendChild(div);
     }
   }
 
-  function buildNumbersCol(container, count) {
+  function buildNumberCol(container, count) {
     container.innerHTML = "";
     container.style.gridTemplateRows = `repeat(${count}, var(--cell-size))`;
     for (let i = 1; i <= count; i++) {
-      const n = document.createElement("div");
-      n.textContent = i;
-      container.appendChild(n);
+      const div = document.createElement("div");
+      div.textContent = i;
+      container.appendChild(div);
     }
   }
+
+  // -------------------------------------------------------------------
+  // Grid building
+  // -------------------------------------------------------------------
 
   function buildGrid() {
     const cols = clampGridSize(colsInput.value);
@@ -422,10 +466,10 @@
     state.cols = cols;
     state.rows = rows;
 
-    buildNumbersRow(topNums, cols);
-    buildNumbersRow(bottomNums, cols);
-    buildNumbersCol(leftNums, rows);
-    buildNumbersCol(rightNums, rows);
+    buildNumberRow(topNums, cols);
+    buildNumberRow(bottomNums, cols);
+    buildNumberCol(leftNums, rows);
+    buildNumberCol(rightNums, rows);
 
     gridElement.innerHTML = "";
     gridElement.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
@@ -434,45 +478,60 @@
       for (let c = 0; c < cols; c++) {
         const cell = document.createElement("div");
         cell.className = "cell";
-        cell.dataset.state = "empty";
-        cell.dataset.row = r;
-        cell.dataset.col = c;
+        cell.dataset.state = STATE_EMPTY;
+        cell.dataset.row = String(r);
+        cell.dataset.col = String(c);
 
-        const t  = r === 0 ? 3 : r % 5 === 0 ? 2 : 1;
-        const l  = c === 0 ? 3 : c % 5 === 0 ? 2 : 1;
-        const b  = r === rows - 1 ? 3 : (r + 1) % 5 === 0 ? 2 : 1;
-        const rt = c === cols - 1 ? 3 : (c + 1) % 5 === 0 ? 2 : 1;
+        // Thicker borders every 5 cells and around outer edge
+        const topWidth =
+          r === 0 ? 3 :
+          r % 5 === 0 ? 2 : 1;
+        const leftWidth =
+          c === 0 ? 3 :
+          c % 5 === 0 ? 2 : 1;
+        const bottomWidth =
+          r === rows - 1 ? 3 :
+          (r + 1) % 5 === 0 ? 2 : 1;
+        const rightWidth =
+          c === cols - 1 ? 3 :
+          (c + 1) % 5 === 0 ? 2 : 1;
 
-        cell.style.borderTopWidth    = t  + "px";
-        cell.style.borderLeftWidth   = l  + "px";
-        cell.style.borderBottomWidth = b  + "px";
-        cell.style.borderRightWidth  = rt + "px";
+        cell.style.borderTopWidth    = topWidth + "px";
+        cell.style.borderLeftWidth   = leftWidth + "px";
+        cell.style.borderBottomWidth = bottomWidth + "px";
+        cell.style.borderRightWidth  = rightWidth + "px";
 
-        cell.addEventListener("mousedown", cellMouseDown);
-        cell.addEventListener("mouseenter", cellMouseEnter);
+        cell.addEventListener("mousedown", onCellMouseDown);
+        cell.addEventListener("mouseenter", onCellMouseEnter);
 
         gridElement.appendChild(cell);
       }
     }
   }
 
-  /* DRAWING */
+  // -------------------------------------------------------------------
+  // Drawing (line / rect)
+  // -------------------------------------------------------------------
 
   function drawLineTo(row, col) {
     const dr = row - state.dragStartRow;
     const dc = col - state.dragStartCol;
 
     if (Math.abs(dr) >= Math.abs(dc)) {
+      // Vertical line
       const r1 = Math.min(state.dragStartRow, row);
       const r2 = Math.max(state.dragStartRow, row);
       for (let r = r1; r <= r2; r++) {
-        setState(gridElement.children[idx(r, state.dragStartCol)], state.dragTargetState);
+        const idx = indexFromRowCol(r, state.dragStartCol);
+        setCellState(gridElement.children[idx], state.dragTargetState);
       }
     } else {
+      // Horizontal line
       const c1 = Math.min(state.dragStartCol, col);
       const c2 = Math.max(state.dragStartCol, col);
       for (let c = c1; c <= c2; c++) {
-        setState(gridElement.children[idx(state.dragStartRow, c)], state.dragTargetState);
+        const idx = indexFromRowCol(state.dragStartRow, c);
+        setCellState(gridElement.children[idx], state.dragTargetState);
       }
     }
   }
@@ -485,15 +544,20 @@
 
     for (let r = r1; r <= r2; r++) {
       for (let c = c1; c <= c2; c++) {
-        setState(gridElement.children[idx(r, c)], state.dragTargetState);
+        const idx = indexFromRowCol(r, c);
+        setCellState(gridElement.children[idx], state.dragTargetState);
       }
     }
   }
 
-  /* CELL EVENTS */
+  // -------------------------------------------------------------------
+  // Cell event handlers
+  // -------------------------------------------------------------------
 
-  function cellMouseDown(event) {
-    if (event.button !== 0 && event.button !== 2) return;
+  function onCellMouseDown(event) {
+    if (event.button !== BUTTON_LEFT && event.button !== BUTTON_RIGHT) {
+      return;
+    }
 
     event.preventDefault();
     hideTooltip();
@@ -502,51 +566,60 @@
     const row  = Number(cell.dataset.row);
     const col  = Number(cell.dataset.col);
 
-    const current = getState(cell);
-    const next = event.button === 0 ? nextLeft(current) : nextRight(current);
+    const current = getCellState(cell);
+    const next = (event.button === BUTTON_LEFT)
+      ? nextStateLeft(current)
+      : nextStateRight(current);
 
-    setState(cell, next);
+    setCellState(cell, next);
 
-    state.isMouseDown = true;
-    state.dragButton = event.button;
-    state.dragStartRow = row;
-    state.dragStartCol = col;
+    state.isMouseDown    = true;
+    state.dragButton     = event.button;
+    state.dragStartRow   = row;
+    state.dragStartCol   = col;
     state.dragTargetState = next;
 
-    if (state.selectionMode !== "free") {
-      snapshot();
-      showTooltip("1x1", event.clientX, event.clientY);
-    } else {
+    if (state.selectionMode === MODE_FREE) {
       state.originalStates = null;
+      return;
     }
+
+    snapshotGrid();
+    showTooltip("1x1", event.clientX, event.clientY);
   }
 
-  function cellMouseEnter(event) {
+  function onCellMouseEnter(event) {
     if (!state.isMouseDown) return;
 
     const cell = event.currentTarget;
     const row  = Number(cell.dataset.row);
     const col  = Number(cell.dataset.col);
 
-    if (state.selectionMode === "free") {
-      const cur = getState(cell);
-      const next = state.dragButton === 0 ? nextLeft(cur) : nextRight(cur);
-      setState(cell, next);
+    if (state.selectionMode === MODE_FREE) {
+      const current = getCellState(cell);
+      const next = (state.dragButton === BUTTON_LEFT)
+        ? nextStateLeft(current)
+        : nextStateRight(current);
+      setCellState(cell, next);
       return;
     }
 
-    restore();
-    if (state.selectionMode === "line") {
+    // Line or rectangle mode: restore base grid then apply preview
+    restoreGridFromSnapshot();
+
+    if (state.selectionMode === MODE_LINE) {
       drawLineTo(row, col);
-    } else if (state.selectionMode === "rect") {
+    } else if (state.selectionMode === MODE_RECT) {
       drawRectTo(row, col);
     }
   }
 
-  /* TOOLTIP FOLLOW */
+  // -------------------------------------------------------------------
+  // Tooltip follow logic
+  // -------------------------------------------------------------------
 
   gridElement.addEventListener("mousemove", (event) => {
-    if (!state.isMouseDown || state.selectionMode === "free") {
+    if (!state.isMouseDown || state.selectionMode === MODE_FREE) {
       hideTooltip();
       return;
     }
@@ -557,17 +630,16 @@
     const row = Number(cell.dataset.row);
     const col = Number(cell.dataset.col);
 
-    let width  = Math.abs(col - state.dragStartCol) + 1;
-    let height = Math.abs(row - state.dragStartRow) + 1;
+    let { width, height } = getDragSize(row, col);
 
-    if (state.selectionMode === "line") {
+    if (state.selectionMode === MODE_LINE) {
       const dr = row - state.dragStartRow;
       const dc = col - state.dragStartCol;
       if (Math.abs(dr) >= Math.abs(dc)) {
-        width = 1;
+        width  = 1;
         height = Math.abs(dr) + 1;
       } else {
-        width = Math.abs(dc) + 1;
+        width  = Math.abs(dc) + 1;
         height = 1;
       }
     }
@@ -575,38 +647,45 @@
     showTooltip(`${width}x${height}`, event.clientX, event.clientY);
   });
 
-  /* GLOBAL EVENTS */
+  // -------------------------------------------------------------------
+  // Global events
+  // -------------------------------------------------------------------
 
   document.addEventListener("mouseup", () => {
-    state.isMouseDown = false;
-    state.dragStartRow = null;
-    state.dragStartCol = null;
-    state.dragButton = null;
+    state.isMouseDown    = false;
+    state.dragStartRow   = null;
+    state.dragStartCol   = null;
+    state.dragButton     = null;
     state.dragTargetState = null;
     state.originalStates = null;
     hideTooltip();
   });
 
-  gridElement.addEventListener("contextmenu", e => e.preventDefault());
+  gridElement.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
 
-  // Zoom: Ctrl (Win/Linux) or Cmd (macOS) + wheel
+  // Zoom: Ctrl or Cmd + wheel
   boardWrapper.addEventListener("wheel", (event) => {
     const isZoomGesture = event.ctrlKey || event.metaKey;
     if (!isZoomGesture) return;
 
     event.preventDefault();
-    const delta = event.deltaY;
-    state.zoom *= delta < 0 ? ZOOM_IN : ZOOM_OUT;
+    const delta = event.deltaY || 0;
+    const factor = delta < 0 ? ZOOM_IN_F : ZOOM_OUT_F;
+
+    state.zoom *= factor;
     state.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, state.zoom));
     applyZoom();
   }, { passive: false });
 
   // Mode switching
-  document.querySelectorAll('input[name="mode"]').forEach(radio => {
+  modeRadios.forEach(radio => {
     radio.addEventListener("change", () => {
-      if (radio.checked) {
-        state.selectionMode = radio.value;
-        if (state.selectionMode === "free") hideTooltip();
+      if (!radio.checked) return;
+      state.selectionMode = radio.value;
+      if (state.selectionMode === MODE_FREE) {
+        hideTooltip();
       }
     });
   });
@@ -614,23 +693,24 @@
   // Theme switching
   themeRadios.forEach(radio => {
     radio.addEventListener("change", () => {
-      if (radio.checked) {
-        setTheme(radio.value);
-      }
+      if (!radio.checked) return;
+      setTheme(radio.value);
     });
   });
 
-  // Build/reset
+  // Build/reset button
   buildBtn.addEventListener("click", () => {
     hideTooltip();
     buildGrid();
   });
 
-  /* INIT */
+  // -------------------------------------------------------------------
+  // Initialisation
+  // -------------------------------------------------------------------
 
-  setTheme("dark"); // default
-  buildGrid();
-  applyZoom();
+  setTheme("dark");   // default theme
+  buildGrid();        // build initial grid
+  applyZoom();        // apply default zoom
 </script>
 
 </body>
