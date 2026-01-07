@@ -168,14 +168,14 @@
     width: var(--cell-size);
     height: var(--cell-size);
     box-sizing: border-box;
-    border: 1px solid #000;   /* uniform border for all cells */
+    border: 1px solid #000;   /* uniform thin grid lines */
     background: var(--grid-bg);
     font-size: 16px;
     line-height: var(--cell-size);
     text-align: center;
     cursor: pointer;
     position: relative;
-    box-shadow: none;         /* per-cell shadows added inline */
+    box-shadow: none;         /* per-cell shadows are applied inline */
   }
 
   .cell.filled {
@@ -271,6 +271,8 @@
 </div>
 
 <script>
+  "use strict";
+
   // -------------------------------------------------------------------
   // Config and constants
   // -------------------------------------------------------------------
@@ -355,9 +357,7 @@
     const gridShadow = baseShadow || "";
     if (stateName === STATE_FILLED) {
       const inset = "inset 0 0 0 2px var(--grid-bg)";
-      cell.style.boxShadow = gridShadow
-        ? gridShadow + ", " + inset
-        : inset;
+      cell.style.boxShadow = gridShadow ? `${gridShadow}, ${inset}` : inset;
     } else {
       cell.style.boxShadow = gridShadow;
     }
@@ -394,18 +394,24 @@
 
   function snapshotGrid() {
     const cells = gridElement.children;
-    state.originalStates = new Array(cells.length);
-    for (let i = 0; i < cells.length; i++) {
-      state.originalStates[i] = cells[i].dataset.state || STATE_EMPTY;
+    const len   = cells.length;
+    const snap  = new Array(len);
+
+    for (let i = 0; i < len; i++) {
+      snap[i] = cells[i].dataset.state || STATE_EMPTY;
     }
+    state.originalStates = snap;
   }
 
   function restoreGridFromSnapshot() {
-    if (!state.originalStates) return;
+    const snap = state.originalStates;
+    if (!snap) return;
+
     const cells = gridElement.children;
-    if (cells.length !== state.originalStates.length) return;
+    if (cells.length !== snap.length) return;
+
     for (let i = 0; i < cells.length; i++) {
-      setCellState(cells[i], state.originalStates[i]);
+      setCellState(cells[i], snap[i]);
     }
   }
 
@@ -429,9 +435,10 @@
   }
 
   function getDragSize(row, col) {
-    const width  = Math.abs(col - state.dragStartCol) + 1;
-    const height = Math.abs(row - state.dragStartRow) + 1;
-    return { width, height };
+    return {
+      width:  Math.abs(col - state.dragStartCol) + 1,
+      height: Math.abs(row - state.dragStartRow) + 1
+    };
   }
 
   // -------------------------------------------------------------------
@@ -465,7 +472,7 @@
   function computeGridShadow(row, col, rows, cols) {
     const shadows = [];
 
-    // Outer borders: thickness 3 (1px border + 2px shadows)
+    // Outer borders: thickness 3 (1px border + 2px shadow)
     if (row === 0) {
       shadows.push("0 -1px 0 0 #000", "0 -2px 0 0 #000");
     }
@@ -574,9 +581,7 @@
   // -------------------------------------------------------------------
 
   function onCellMouseDown(event) {
-    if (event.button !== BUTTON_LEFT && event.button !== BUTTON_RIGHT) {
-      return;
-    }
+    if (event.button !== BUTTON_LEFT && event.button !== BUTTON_RIGHT) return;
 
     event.preventDefault();
     hideTooltip();
@@ -702,9 +707,7 @@
     radio.addEventListener("change", () => {
       if (!radio.checked) return;
       state.selectionMode = radio.value;
-      if (state.selectionMode === MODE_FREE) {
-        hideTooltip();
-      }
+      if (state.selectionMode === MODE_FREE) hideTooltip();
     });
   });
 
