@@ -242,8 +242,8 @@
 
 <div class="mode-select">
   <span>Selection mode:</span>
-  <label><input type="radio" name="mode" value="line" checked> Straight line</label>
-  <label><input type="radio" name="mode" value="rect"> Rectangle</label>
+  <label><input type="radio" name="mode" value="line"> Straight line</label>
+  <label><input type="radio" name="mode" value="rect" checked> Rectangle</label>
   <label><input type="radio" name="mode" value="free"> Freestyle</label>
 </div>
 
@@ -306,7 +306,7 @@
   /* STATE */
 
   const state = {
-    selectionMode: "line",
+    selectionMode: "rect",  // default to rectangle
     isMouseDown: false,
     dragStartRow: null,
     dragStartCol: null,
