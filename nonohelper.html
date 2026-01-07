@@ -181,19 +181,15 @@
     width: var(--cell-size);
     height: var(--cell-size);
     box-sizing: border-box;
-    border: 1px solid #000;   /* uniform thin grid lines */
+    border: 1px solid #000;
     background: var(--grid-bg);
-    font-size: 16px;
-    line-height: var(--cell-size);
-    text-align: center;
     cursor: pointer;
     position: relative;
-    box-shadow: none;         /* per-cell shadows are applied inline */
+    box-shadow: none;
   }
 
   .cell.filled {
     background: #000;
-    color: #000;
   }
 
   .cell.cross {
@@ -208,7 +204,6 @@
     transform: translate(-50%, -50%);
     font-size: 20px;
     font-weight: bold;
-    line-height: 1;
     color: #c00;
     pointer-events: none;
   }
@@ -225,6 +220,31 @@
     pointer-events: none;
     z-index: 1000;
     display: none;
+  }
+
+  /* Footer */
+
+  footer {
+    margin-top: 30px;
+    padding-top: 12px;
+    border-top: 1px solid #444;
+    font-size: 0.9rem;
+    text-align: center;
+    color: #bbb;
+  }
+
+  body[data-theme="light"] footer {
+    border-top-color: #ccc;
+    color: #555;
+  }
+
+  footer a {
+    color: #7abaff;
+    text-decoration: none;
+  }
+
+  footer a:hover {
+    text-decoration: underline;
   }
 </style>
 </head>
@@ -289,590 +309,569 @@
   </div>
 </div>
 
+<footer>
+  Source available on GitHub:<br>
+  <a href="https://github.com/martbrooks/nonohelper" target="_blank">
+    github.com/martbrooks/nonohelper
+  </a>
+</footer>
+
 <script>
-  "use strict";
+"use strict";
 
-  // -------------------------------------------------------------------
-  // Config and constants
-  // -------------------------------------------------------------------
+/* =====================================================================
+   CONSTANTS & CONFIG
+   ===================================================================== */
 
-  const MIN_SIZE   = 5;
-  const MAX_SIZE   = 50;
-  const STEP_SIZE  = 5;
-  const MIN_ZOOM   = 0.4;
-  const MAX_ZOOM   = 3.0;
-  const ZOOM_IN_F  = 1.1;
-  const ZOOM_OUT_F = 0.9;
+const MIN_SIZE   = 5;
+const MAX_SIZE   = 50;
+const STEP_SIZE  = 5;
+const MIN_ZOOM   = 0.4;
+const MAX_ZOOM   = 3.0;
+const ZOOM_IN_F  = 1.1;
+const ZOOM_OUT_F = 0.9;
 
-  const MODE_LINE = "line";
-  const MODE_RECT = "rect";
-  const MODE_FREE = "free";
+const MODE_LINE = "line";
+const MODE_RECT = "rect";
+const MODE_FREE = "free";
 
-  const BUTTON_LEFT  = 0;
-  const BUTTON_RIGHT = 2;
+const BUTTON_LEFT  = 0;
+const BUTTON_RIGHT = 2;
 
-  const STATE_EMPTY  = "empty";
-  const STATE_FILLED = "filled";
-  const STATE_CROSS  = "cross";
+const STATE_EMPTY  = "empty";
+const STATE_FILLED = "filled";
+const STATE_CROSS  = "cross";
 
-  const MAX_HISTORY = 50;
+const MAX_HISTORY = 50;
 
-  // -------------------------------------------------------------------
-  // DOM references
-  // -------------------------------------------------------------------
+/* =====================================================================
+   DOM REFERENCES
+   ===================================================================== */
 
-  const gridElement  = document.getElementById("grid");
-  const colsInput    = document.getElementById("colsInput");
-  const rowsInput    = document.getElementById("rowsInput");
-  const buildBtn     = document.getElementById("buildGridBtn");
+const gridElement  = document.getElementById("grid");
+const colsInput    = document.getElementById("colsInput");
+const rowsInput    = document.getElementById("rowsInput");
+const buildBtn     = document.getElementById("buildGridBtn");
 
-  const topNums      = document.getElementById("topNums");
-  const bottomNums   = document.getElementById("bottomNums");
-  const leftNums     = document.getElementById("leftNums");
-  const rightNums    = document.getElementById("rightNums");
+const topNums      = document.getElementById("topNums");
+const bottomNums   = document.getElementById("bottomNums");
+const leftNums     = document.getElementById("leftNums");
+const rightNums    = document.getElementById("rightNums");
 
-  const boardRoot    = document.getElementById("boardRoot");
-  const boardWrapper = document.getElementById("boardWrapper");
+const boardRoot    = document.getElementById("boardRoot");
+const boardWrapper = document.getElementById("boardWrapper");
 
-  const themeRadios  = document.querySelectorAll('input[name="theme"]');
-  const modeRadios   = document.querySelectorAll('input[name="mode"]');
+const themeRadios  = document.querySelectorAll('input[name="theme"]');
+const modeRadios   = document.querySelectorAll('input[name="mode"]');
 
-  const undoBtn      = document.getElementById("undoBtn");
-  const redoBtn      = document.getElementById("redoBtn");
+const undoBtn      = document.getElementById("undoBtn");
+const redoBtn      = document.getElementById("redoBtn");
 
-  const tooltip      = document.createElement("div");
-  tooltip.className  = "selection-tooltip";
-  document.body.appendChild(tooltip);
+const tooltip      = document.createElement("div");
+tooltip.className  = "selection-tooltip";
+document.body.appendChild(tooltip);
 
-  // -------------------------------------------------------------------
-  // State
-  // -------------------------------------------------------------------
+/* =====================================================================
+   STATE
+   ===================================================================== */
 
-  const state = {
-    selectionMode: MODE_RECT,
-    isMouseDown: false,
-    dragStartRow: null,
-    dragStartCol: null,
-    dragButton: null,
-    dragTargetState: null,
-    cols: 25,
-    rows: 25,
-    originalStates: null,     // for drag previews
-    zoom: 1,
-    history: [],              // array of snapshots
-    historyIndex: -1,
-    changedThisDrag: false    // flag to see if we should record a history state
-  };
+const state = {
+  selectionMode: MODE_RECT,
+  isMouseDown: false,
+  dragStartRow: null,
+  dragStartCol: null,
+  dragButton: null,
+  dragTargetState: null,
+  cols: 25,
+  rows: 25,
+  previewStates: null,   // for drag previews
+  zoom: 1,
+  history: [],           // undo/redo snapshots
+  historyIndex: -1,
+  changedThisDrag: false
+};
 
-  // -------------------------------------------------------------------
-  // Helper functions
-  // -------------------------------------------------------------------
+/* =====================================================================
+   GENERIC GRID STATE HELPERS
+   ===================================================================== */
 
-  function clampGridSize(value) {
-    let n = parseInt(value, 10);
-    if (isNaN(n)) n = 25;
-    n = Math.max(MIN_SIZE, Math.min(MAX_SIZE, n));
-    n = Math.round(n / STEP_SIZE) * STEP_SIZE;
-    return n;
+function readGridStates() {
+  const cells = gridElement.children;
+  const states = new Array(cells.length);
+  for (let i = 0; i < cells.length; i++) {
+    states[i] = cells[i].dataset.state || STATE_EMPTY;
   }
+  return states;
+}
 
-  function getCellState(cell) {
-    return cell.dataset.state || STATE_EMPTY;
-  }
+function writeGridStates(states) {
+  if (!states) return;
+  const cells = gridElement.children;
+  if (cells.length !== states.length) return;
 
-  function applyBoxShadowForState(cell, baseShadow, stateName) {
-    const gridShadow = baseShadow || "";
-    if (stateName === STATE_FILLED) {
-      const inset = "inset 0 0 0 2px var(--grid-bg)";
-      cell.style.boxShadow = gridShadow ? `${gridShadow}, ${inset}` : inset;
-    } else {
-      cell.style.boxShadow = gridShadow;
-    }
-  }
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i];
+    const s    = states[i];
 
-  function setCellState(cell, newState) {
-    const prev = cell.dataset.state || STATE_EMPTY;
-    if (prev === newState) return;
-
-    cell.dataset.state = newState;
+    cell.dataset.state = s;
     cell.classList.remove("filled", "cross");
+    if (s === STATE_FILLED) cell.classList.add("filled");
+    if (s === STATE_CROSS)  cell.classList.add("cross");
 
-    if (newState === STATE_FILLED) {
-      cell.classList.add("filled");
-    } else if (newState === STATE_CROSS) {
-      cell.classList.add("cross");
+    applyBoxShadowForState(cell, cell.dataset.gridShadow, s);
+  }
+}
+
+/* =====================================================================
+   BASIC UTILS
+   ===================================================================== */
+
+function clampGridSize(value) {
+  let n = parseInt(value, 10);
+  if (isNaN(n)) n = 25;
+  n = Math.max(MIN_SIZE, Math.min(MAX_SIZE, n));
+  return Math.round(n / STEP_SIZE) * STEP_SIZE;
+}
+
+function getCellState(cell) {
+  return cell.dataset.state || STATE_EMPTY;
+}
+
+function applyBoxShadowForState(cell, baseShadow, newState) {
+  const gridShadow = baseShadow || "";
+  if (newState === STATE_FILLED) {
+    const inset = "inset 0 0 0 2px var(--grid-bg)";
+    cell.style.boxShadow = gridShadow ? `${gridShadow}, ${inset}` : inset;
+  } else {
+    cell.style.boxShadow = gridShadow;
+  }
+}
+
+function setCellState(cell, newState) {
+  const prev = cell.dataset.state || STATE_EMPTY;
+  if (prev === newState) return;
+
+  cell.dataset.state = newState;
+  cell.classList.remove("filled", "cross");
+
+  if (newState === STATE_FILLED) cell.classList.add("filled");
+  if (newState === STATE_CROSS)  cell.classList.add("cross");
+
+  applyBoxShadowForState(cell, cell.dataset.gridShadow, newState);
+  state.changedThisDrag = true;
+}
+
+function nextStateLeft(current) {
+  if (current === STATE_EMPTY)  return STATE_FILLED;
+  if (current === STATE_FILLED) return STATE_CROSS;
+  return STATE_EMPTY;
+}
+
+function nextStateRight(current) {
+  if (current === STATE_EMPTY)  return STATE_CROSS;
+  if (current === STATE_CROSS)  return STATE_FILLED;
+  return STATE_EMPTY;
+}
+
+function indexFromRowCol(row, col) {
+  return row * state.cols + col;
+}
+
+function showTooltip(text, x, y) {
+  tooltip.textContent   = text;
+  tooltip.style.left    = (x + 12) + "px";
+  tooltip.style.top     = (y + 12) + "px";
+  tooltip.style.display = "block";
+}
+
+function hideTooltip() {
+  tooltip.style.display = "none";
+}
+
+function applyZoom() {
+  boardRoot.style.transform = `scale(${state.zoom})`;
+}
+
+function setTheme(mode) {
+  document.body.setAttribute("data-theme", mode);
+}
+
+function getDragSize(row, col) {
+  return {
+    width:  Math.abs(col - state.dragStartCol) + 1,
+    height: Math.abs(row - state.dragStartRow) + 1
+  };
+}
+
+/* =====================================================================
+   PREVIEW SNAPSHOT (FOR DRAG)
+   ===================================================================== */
+
+function snapshotPreview() {
+  state.previewStates = readGridStates();
+}
+
+function restorePreview() {
+  if (!state.previewStates) return;
+  writeGridStates(state.previewStates);
+}
+
+/* =====================================================================
+   UNDO / REDO HISTORY
+   ===================================================================== */
+
+function pushHistoryState() {
+  const snapshot = readGridStates();
+
+  if (state.historyIndex < state.history.length - 1) {
+    state.history = state.history.slice(0, state.historyIndex + 1);
+  }
+
+  state.history.push(snapshot);
+
+  if (state.history.length > MAX_HISTORY) {
+    state.history.shift();
+  }
+
+  state.historyIndex = state.history.length - 1;
+  updateHistoryButtons();
+}
+
+function applyHistorySnapshot(index) {
+  if (index < 0 || index >= state.history.length) return;
+  writeGridStates(state.history[index]);
+  state.historyIndex = index;
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  undoBtn.disabled = state.historyIndex <= 0;
+  redoBtn.disabled = state.historyIndex >= state.history.length - 1;
+}
+
+function undo() {
+  if (state.historyIndex <= 0) return;
+  applyHistorySnapshot(state.historyIndex - 1);
+}
+
+function redo() {
+  if (state.historyIndex >= state.history.length - 1) return;
+  applyHistorySnapshot(state.historyIndex + 1);
+}
+
+/* =====================================================================
+   NUMBER STRIPS
+   ===================================================================== */
+
+function buildNumberRow(container, count) {
+  container.innerHTML = "";
+  container.style.gridTemplateColumns = `repeat(${count}, var(--cell-size))`;
+  for (let i = 1; i <= count; i++) {
+    const div = document.createElement("div");
+    div.textContent = i;
+    container.appendChild(div);
+  }
+}
+
+function buildNumberCol(container, count) {
+  container.innerHTML = "";
+  container.style.gridTemplateRows = `repeat(${count}, var(--cell-size))`;
+  for (let i = 1; i <= count; i++) {
+    const div = document.createElement("div");
+    div.textContent = i;
+    container.appendChild(div);
+  }
+}
+
+/* =====================================================================
+   GRID BUILDING
+   ===================================================================== */
+
+function computeGridShadow(row, col, rows, cols) {
+  const shadows = [];
+
+  // Outer borders: thickness 3 (1px border + 2px shadows)
+  if (row === 0)      shadows.push("0 -1px 0 0 #000", "0 -2px 0 0 #000");
+  if (row === rows-1) shadows.push("0 1px 0 0 #000",  "0 2px 0 0 #000");
+  if (col === 0)      shadows.push("-1px 0 0 0 #000", "-2px 0 0 0 #000");
+  if (col === cols-1) shadows.push("1px 0 0 0 #000",  "2px 0 0 0 #000");
+
+  // Internal 5×5 boundaries (extra 1px shadow)
+  if (row > 0 && row % 5 === 0) shadows.push("0 -1px 0 0 #000");
+  if (col > 0 && col % 5 === 0) shadows.push("-1px 0 0 0 #000");
+
+  return shadows.join(", ");
+}
+
+function buildGrid() {
+  const cols = clampGridSize(colsInput.value);
+  const rows = clampGridSize(rowsInput.value);
+
+  colsInput.value = cols;
+  rowsInput.value = rows;
+
+  state.cols = cols;
+  state.rows = rows;
+
+  buildNumberRow(topNums, cols);
+  buildNumberRow(bottomNums, cols);
+  buildNumberCol(leftNums, rows);
+  buildNumberCol(rightNums, rows);
+
+  gridElement.innerHTML = "";
+  gridElement.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      cell.dataset.state = STATE_EMPTY;
+      cell.dataset.row = String(r);
+      cell.dataset.col = String(c);
+
+      const shadow = computeGridShadow(r, c, rows, cols);
+      cell.dataset.gridShadow = shadow;
+      applyBoxShadowForState(cell, shadow, STATE_EMPTY);
+
+      cell.addEventListener("mousedown", onCellMouseDown);
+      cell.addEventListener("mouseenter", onCellMouseEnter);
+
+      gridElement.appendChild(cell);
     }
-
-    applyBoxShadowForState(cell, cell.dataset.gridShadow, newState);
-    state.changedThisDrag = true;
   }
 
-  function nextStateLeft(current) {
-    if (current === STATE_EMPTY)  return STATE_FILLED;
-    if (current === STATE_FILLED) return STATE_CROSS;
-    return STATE_EMPTY;
-  }
+  state.history = [];
+  state.historyIndex = -1;
+  pushHistoryState();
+}
 
-  function nextStateRight(current) {
-    if (current === STATE_EMPTY)  return STATE_CROSS;
-    if (current === STATE_CROSS)  return STATE_FILLED;
-    return STATE_EMPTY;
-  }
+/* =====================================================================
+   DRAWING (LINE / RECT)
+   ===================================================================== */
 
-  function indexFromRowCol(row, col) {
-    return row * state.cols + col;
-  }
+function drawLineTo(row, col) {
+  const dr = row - state.dragStartRow;
+  const dc = col - state.dragStartCol;
 
-  // ----- Snapshot for drag preview (not undo/redo) -----
-
-  function snapshotGridPreview() {
-    const cells = gridElement.children;
-    const len   = cells.length;
-    const snap  = new Array(len);
-
-    for (let i = 0; i < len; i++) {
-      snap[i] = cells[i].dataset.state || STATE_EMPTY;
+  if (Math.abs(dr) >= Math.abs(dc)) {
+    const r1 = Math.min(state.dragStartRow, row);
+    const r2 = Math.max(state.dragStartRow, row);
+    for (let r = r1; r <= r2; r++) {
+      const idx = indexFromRowCol(r, state.dragStartCol);
+      setCellState(gridElement.children[idx], state.dragTargetState);
     }
-    state.originalStates = snap;
-  }
-
-  function restoreGridFromSnapshotPreview() {
-    const snap = state.originalStates;
-    if (!snap) return;
-
-    const cells = gridElement.children;
-    if (cells.length !== snap.length) return;
-
-    for (let i = 0; i < cells.length; i++) {
-      const cell = cells[i];
-      const stored = snap[i];
-      cell.dataset.state = stored;
-      cell.classList.remove("filled", "cross");
-      if (stored === STATE_FILLED) cell.classList.add("filled");
-      if (stored === STATE_CROSS)  cell.classList.add("cross");
-      applyBoxShadowForState(cell, cell.dataset.gridShadow, stored);
+  } else {
+    const c1 = Math.min(state.dragStartCol, col);
+    const c2 = Math.max(state.dragStartCol, col);
+    for (let c = c1; c <= c2; c++) {
+      const idx = indexFromRowCol(state.dragStartRow, c);
+      setCellState(gridElement.children[idx], state.dragTargetState);
     }
   }
+}
 
-  // ----- History (undo/redo) -----
+function drawRectTo(row, col) {
+  const r1 = Math.min(state.dragStartRow, row);
+  const r2 = Math.max(state.dragStartRow, row);
+  const c1 = Math.min(state.dragStartCol, col);
+  const c2 = Math.max(state.dragStartCol, col);
 
-  function takeHistorySnapshot() {
-    const cells = gridElement.children;
-    const len   = cells.length;
-    const snap  = new Array(len);
-
-    for (let i = 0; i < len; i++) {
-      snap[i] = cells[i].dataset.state || STATE_EMPTY;
-    }
-    return snap;
-  }
-
-  function applyHistorySnapshot(snapshot) {
-    const cells = gridElement.children;
-    if (!snapshot || cells.length !== snapshot.length) return;
-
-    for (let i = 0; i < cells.length; i++) {
-      const cell = cells[i];
-      const s    = snapshot[i];
-      cell.dataset.state = s;
-      cell.classList.remove("filled", "cross");
-      if (s === STATE_FILLED) cell.classList.add("filled");
-      if (s === STATE_CROSS)  cell.classList.add("cross");
-      applyBoxShadowForState(cell, cell.dataset.gridShadow, s);
+  for (let r = r1; r <= r2; r++) {
+    for (let c = c1; c <= c2; c++) {
+      const idx = indexFromRowCol(r, c);
+      setCellState(gridElement.children[idx], state.dragTargetState);
     }
   }
+}
 
-  function updateHistoryButtons() {
-    undoBtn.disabled = state.historyIndex <= 0;
-    redoBtn.disabled = state.historyIndex >= state.history.length - 1;
+/* =====================================================================
+   CELL EVENT HANDLERS
+   ===================================================================== */
+
+function onCellMouseDown(event) {
+  if (event.button !== BUTTON_LEFT && event.button !== BUTTON_RIGHT) return;
+
+  event.preventDefault();
+  hideTooltip();
+
+  const cell = event.currentTarget;
+  const row  = Number(cell.dataset.row);
+  const col  = Number(cell.dataset.col);
+
+  const current = getCellState(cell);
+  const next    = (event.button === BUTTON_LEFT)
+                    ? nextStateLeft(current)
+                    : nextStateRight(current);
+
+  state.changedThisDrag = false;
+
+  setCellState(cell, next);
+
+  state.isMouseDown     = true;
+  state.dragButton      = event.button;
+  state.dragStartRow    = row;
+  state.dragStartCol    = col;
+  state.dragTargetState = next;
+
+  if (state.selectionMode === MODE_FREE) {
+    state.previewStates = null;
+    return;
   }
 
-  function pushHistoryState() {
-    const snapshot = takeHistorySnapshot();
+  snapshotPreview();
+  showTooltip("1x1", event.clientX, event.clientY);
+}
 
-    // If we've undone some steps and then change the grid,
-    // drop all "future" states.
-    if (state.historyIndex < state.history.length - 1) {
-      state.history = state.history.slice(0, state.historyIndex + 1);
-    }
+function onCellMouseEnter(event) {
+  if (!state.isMouseDown) return;
 
-    state.history.push(snapshot);
+  const cell = event.currentTarget;
+  const row  = Number(cell.dataset.row);
+  const col  = Number(cell.dataset.col);
 
-    // Enforce max history length.
-    if (state.history.length > MAX_HISTORY) {
-      state.history.shift();
-    }
-
-    // Adjust historyIndex to point to the last entry.
-    state.historyIndex = state.history.length - 1;
-    updateHistoryButtons();
+  if (state.selectionMode === MODE_FREE) {
+    const current = getCellState(cell);
+    const next    = (state.dragButton === BUTTON_LEFT)
+                      ? nextStateLeft(current)
+                      : nextStateRight(current);
+    setCellState(cell, next);
+    return;
   }
 
-  function undo() {
-    if (state.historyIndex <= 0) return;
-    state.historyIndex -= 1;
-    applyHistorySnapshot(state.history[state.historyIndex]);
-    updateHistoryButtons();
+  restorePreview();
+
+  if (state.selectionMode === MODE_LINE) {
+    drawLineTo(row, col);
+  } else {
+    drawRectTo(row, col);
+  }
+}
+
+/* =====================================================================
+   TOOLTIP FOLLOWING
+   ===================================================================== */
+
+gridElement.addEventListener("mousemove", (event) => {
+  if (!state.isMouseDown || state.selectionMode === MODE_FREE) {
+    hideTooltip();
+    return;
   }
 
-  function redo() {
-    if (state.historyIndex >= state.history.length - 1) return;
-    state.historyIndex += 1;
-    applyHistorySnapshot(state.history[state.historyIndex]);
-    updateHistoryButtons();
-  }
+  const cell = event.target.closest(".cell");
+  if (!cell) return;
 
-  function showTooltip(text, x, y) {
-    tooltip.textContent   = text;
-    tooltip.style.left    = (x + 12) + "px";
-    tooltip.style.top     = (y + 12) + "px";
-    tooltip.style.display = "block";
-  }
+  const row = Number(cell.dataset.row);
+  const col = Number(cell.dataset.col);
 
-  function hideTooltip() {
-    tooltip.style.display = "none";
-  }
+  let { width, height } = getDragSize(row, col);
 
-  function applyZoom() {
-    boardRoot.style.transform = `scale(${state.zoom})`;
-  }
-
-  function setTheme(mode) {
-    document.body.setAttribute("data-theme", mode);
-  }
-
-  function getDragSize(row, col) {
-    return {
-      width:  Math.abs(col - state.dragStartCol) + 1,
-      height: Math.abs(row - state.dragStartRow) + 1
-    };
-  }
-
-  // -------------------------------------------------------------------
-  // Number strips
-  // -------------------------------------------------------------------
-
-  function buildNumberRow(container, count) {
-    container.innerHTML = "";
-    container.style.gridTemplateColumns = `repeat(${count}, var(--cell-size))`;
-    for (let i = 1; i <= count; i++) {
-      const div = document.createElement("div");
-      div.textContent = i;
-      container.appendChild(div);
+  if (state.selectionMode === MODE_LINE) {
+    const dr = row - state.dragStartRow;
+    const dc = col - state.dragStartCol;
+    if (Math.abs(dr) >= Math.abs(dc)) {
+      width  = 1;
+      height = Math.abs(dr) + 1;
+    } else {
+      width  = Math.abs(dc) + 1;
+      height = 1;
     }
   }
 
-  function buildNumberCol(container, count) {
-    container.innerHTML = "";
-    container.style.gridTemplateRows = `repeat(${count}, var(--cell-size))`;
-    for (let i = 1; i <= count; i++) {
-      const div = document.createElement("div");
-      div.textContent = i;
-      container.appendChild(div);
-    }
-  }
+  showTooltip(`${width}x${height}`, event.clientX, event.clientY);
+});
 
-  // -------------------------------------------------------------------
-  // Grid building
-  // -------------------------------------------------------------------
+/* =====================================================================
+   GLOBAL EVENTS
+   ===================================================================== */
 
-  function computeGridShadow(row, col, rows, cols) {
-    const shadows = [];
-
-    // Outer borders: thickness 3 (1px border + 2px shadow)
-    if (row === 0) {
-      shadows.push("0 -1px 0 0 #000", "0 -2px 0 0 #000");
-    }
-    if (row === rows - 1) {
-      shadows.push("0 1px 0 0 #000", "0 2px 0 0 #000");
-    }
-    if (col === 0) {
-      shadows.push("-1px 0 0 0 #000", "-2px 0 0 0 #000");
-    }
-    if (col === cols - 1) {
-      shadows.push("1px 0 0 0 #000", "2px 0 0 0 #000");
-    }
-
-    // Internal 5x5 boundaries: thickness 2 (1px border + 1px shadow)
-    if (row > 0 && row % 5 === 0) {
-      shadows.push("0 -1px 0 0 #000");
-    }
-    if (col > 0 && col % 5 === 0) {
-      shadows.push("-1px 0 0 0 #000");
-    }
-
-    return shadows.join(", ");
-  }
-
-  function buildGrid() {
-    const cols = clampGridSize(colsInput.value);
-    const rows = clampGridSize(rowsInput.value);
-
-    colsInput.value = cols;
-    rowsInput.value = rows;
-
-    state.cols = cols;
-    state.rows = rows;
-
-    buildNumberRow(topNums, cols);
-    buildNumberRow(bottomNums, cols);
-    buildNumberCol(leftNums, rows);
-    buildNumberCol(rightNums, rows);
-
-    gridElement.innerHTML = "";
-    gridElement.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cell = document.createElement("div");
-        cell.className = "cell";
-        cell.dataset.state = STATE_EMPTY;
-        cell.dataset.row = String(r);
-        cell.dataset.col = String(c);
-
-        const shadow = computeGridShadow(r, c, rows, cols);
-        cell.dataset.gridShadow = shadow;
-        applyBoxShadowForState(cell, shadow, STATE_EMPTY);
-
-        cell.addEventListener("mousedown", onCellMouseDown);
-        cell.addEventListener("mouseenter", onCellMouseEnter);
-
-        gridElement.appendChild(cell);
-      }
-    }
-
-    // Reset history for the new grid and store initial state.
-    state.history = [];
-    state.historyIndex = -1;
+document.addEventListener("mouseup", () => {
+  if (state.isMouseDown && state.changedThisDrag) {
     pushHistoryState();
   }
 
-  // -------------------------------------------------------------------
-  // Drawing (line / rect)
-  // -------------------------------------------------------------------
+  state.isMouseDown     = false;
+  state.dragStartRow    = null;
+  state.dragStartCol    = null;
+  state.dragButton      = null;
+  state.dragTargetState = null;
+  state.previewStates   = null;
+  state.changedThisDrag = false;
+  hideTooltip();
+});
 
-  function drawLineTo(row, col) {
-    const dr = row - state.dragStartRow;
-    const dc = col - state.dragStartCol;
+gridElement.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+});
 
-    if (Math.abs(dr) >= Math.abs(dc)) {
-      // Vertical line
-      const r1 = Math.min(state.dragStartRow, row);
-      const r2 = Math.max(state.dragStartRow, row);
-      for (let r = r1; r <= r2; r++) {
-        const idx = indexFromRowCol(r, state.dragStartCol);
-        setCellState(gridElement.children[idx], state.dragTargetState);
-      }
-    } else {
-      // Horizontal line
-      const c1 = Math.min(state.dragStartCol, col);
-      const c2 = Math.max(state.dragStartCol, col);
-      for (let c = c1; c <= c2; c++) {
-        const idx = indexFromRowCol(state.dragStartRow, c);
-        setCellState(gridElement.children[idx], state.dragTargetState);
-      }
-    }
-  }
+/* Zoom: Ctrl/Cmd + wheel */
+boardWrapper.addEventListener("wheel", (event) => {
+  const isZoomGesture = event.ctrlKey || event.metaKey;
+  if (!isZoomGesture) return;
 
-  function drawRectTo(row, col) {
-    const r1 = Math.min(state.dragStartRow, row);
-    const r2 = Math.max(state.dragStartRow, row);
-    const c1 = Math.min(state.dragStartCol, col);
-    const c2 = Math.max(state.dragStartCol, col);
+  event.preventDefault();
+  const delta  = event.deltaY || 0;
+  const factor = delta < 0 ? ZOOM_IN_F : ZOOM_OUT_F;
 
-    for (let r = r1; r <= r2; r++) {
-      for (let c = c1; c <= c2; c++) {
-        const idx = indexFromRowCol(r, c);
-        setCellState(gridElement.children[idx], state.dragTargetState);
-      }
-    }
-  }
-
-  // -------------------------------------------------------------------
-  // Cell event handlers
-  // -------------------------------------------------------------------
-
-  function onCellMouseDown(event) {
-    if (event.button !== BUTTON_LEFT && event.button !== BUTTON_RIGHT) return;
-
-    event.preventDefault();
-    hideTooltip();
-
-    const cell = event.currentTarget;
-    const row  = Number(cell.dataset.row);
-    const col  = Number(cell.dataset.col);
-
-    const current = getCellState(cell);
-    const next = (event.button === BUTTON_LEFT)
-      ? nextStateLeft(current)
-      : nextStateRight(current);
-
-    state.changedThisDrag = false;
-
-    setCellState(cell, next);
-
-    state.isMouseDown     = true;
-    state.dragButton      = event.button;
-    state.dragStartRow    = row;
-    state.dragStartCol    = col;
-    state.dragTargetState = next;
-
-    if (state.selectionMode === MODE_FREE) {
-      state.originalStates = null;
-      return;
-    }
-
-    snapshotGridPreview();
-    showTooltip("1x1", event.clientX, event.clientY);
-  }
-
-  function onCellMouseEnter(event) {
-    if (!state.isMouseDown) return;
-
-    const cell = event.currentTarget;
-    const row  = Number(cell.dataset.row);
-    const col  = Number(cell.dataset.col);
-
-    if (state.selectionMode === MODE_FREE) {
-      const current = getCellState(cell);
-      const next = (state.dragButton === BUTTON_LEFT)
-        ? nextStateLeft(current)
-        : nextStateRight(current);
-      setCellState(cell, next);
-      return;
-    }
-
-    restoreGridFromSnapshotPreview();
-
-    if (state.selectionMode === MODE_LINE) {
-      drawLineTo(row, col);
-    } else if (state.selectionMode === MODE_RECT) {
-      drawRectTo(row, col);
-    }
-  }
-
-  // -------------------------------------------------------------------
-  // Tooltip follow logic
-  // -------------------------------------------------------------------
-
-  gridElement.addEventListener("mousemove", (event) => {
-    if (!state.isMouseDown || state.selectionMode === MODE_FREE) {
-      hideTooltip();
-      return;
-    }
-
-    const cell = event.target.closest(".cell");
-    if (!cell) return;
-
-    const row = Number(cell.dataset.row);
-    const col = Number(cell.dataset.col);
-
-    let { width, height } = getDragSize(row, col);
-
-    if (state.selectionMode === MODE_LINE) {
-      const dr = row - state.dragStartRow;
-      const dc = col - state.dragStartCol;
-      if (Math.abs(dr) >= Math.abs(dc)) {
-        width  = 1;
-        height = Math.abs(dr) + 1;
-      } else {
-        width  = Math.abs(dc) + 1;
-        height = 1;
-      }
-    }
-
-    showTooltip(`${width}x${height}`, event.clientX, event.clientY);
-  });
-
-  // -------------------------------------------------------------------
-  // Global events
-  // -------------------------------------------------------------------
-
-  document.addEventListener("mouseup", () => {
-    if (state.isMouseDown && state.changedThisDrag) {
-      pushHistoryState();
-    }
-
-    state.isMouseDown     = false;
-    state.dragStartRow    = null;
-    state.dragStartCol    = null;
-    state.dragButton      = null;
-    state.dragTargetState = null;
-    state.originalStates  = null;
-    state.changedThisDrag = false;
-    hideTooltip();
-  });
-
-  gridElement.addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-  });
-
-  // Zoom: Ctrl or Cmd + wheel
-  boardWrapper.addEventListener("wheel", (event) => {
-    const isZoomGesture = event.ctrlKey || event.metaKey;
-    if (!isZoomGesture) return;
-
-    event.preventDefault();
-    const delta  = event.deltaY || 0;
-    const factor = delta < 0 ? ZOOM_IN_F : ZOOM_OUT_F;
-
-    state.zoom *= factor;
-    state.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, state.zoom));
-    applyZoom();
-  }, { passive: false });
-
-  // Mode switching
-  modeRadios.forEach(radio => {
-    radio.addEventListener("change", () => {
-      if (!radio.checked) return;
-      state.selectionMode = radio.value;
-      if (state.selectionMode === MODE_FREE) hideTooltip();
-    });
-  });
-
-  // Theme switching
-  themeRadios.forEach(radio => {
-    radio.addEventListener("change", () => {
-      if (!radio.checked) return;
-      setTheme(radio.value);
-    });
-  });
-
-  // Build/reset
-  buildBtn.addEventListener("click", () => {
-    hideTooltip();
-    buildGrid();
-  });
-
-  // Undo/redo buttons
-  undoBtn.addEventListener("click", () => undo());
-  redoBtn.addEventListener("click", () => redo());
-
-  // Keyboard shortcuts: Ctrl/Cmd+Z, Ctrl+Y, Ctrl+Shift+Z
-  document.addEventListener("keydown", (event) => {
-    const ctrlOrCmd = event.ctrlKey || event.metaKey;
-    if (!ctrlOrCmd) return;
-
-    if (event.key.toLowerCase() === "z") {
-      event.preventDefault();
-      if (event.shiftKey) {
-        redo();
-      } else {
-        undo();
-      }
-    } else if (event.key.toLowerCase() === "y") {
-      event.preventDefault();
-      redo();
-    }
-  });
-
-  // -------------------------------------------------------------------
-  // Initialisation
-  // -------------------------------------------------------------------
-
-  setTheme("dark");
-  buildGrid();
+  state.zoom *= factor;
+  state.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, state.zoom));
   applyZoom();
+}, { passive: false });
+
+/* Mode switching */
+modeRadios.forEach(radio => {
+  radio.addEventListener("change", () => {
+    if (!radio.checked) return;
+    state.selectionMode = radio.value;
+    if (state.selectionMode === MODE_FREE) hideTooltip();
+  });
+});
+
+/* Theme switching */
+themeRadios.forEach(radio => {
+  radio.addEventListener("change", () => {
+    if (!radio.checked) return;
+    setTheme(radio.value);
+  });
+});
+
+/* Build/reset */
+buildBtn.addEventListener("click", () => {
+  hideTooltip();
+  buildGrid();
+});
+
+/* Undo/Redo buttons */
+undoBtn.addEventListener("click", undo);
+redoBtn.addEventListener("click", redo);
+
+/* Keyboard shortcuts: Ctrl/Cmd+Z, Ctrl+Y, Ctrl+Shift+Z */
+document.addEventListener("keydown", (event) => {
+  const ctrlOrCmd = event.ctrlKey || event.metaKey;
+  if (!ctrlOrCmd) return;
+
+  const key = event.key.toLowerCase();
+
+  if (key === "z") {
+    event.preventDefault();
+    if (event.shiftKey) {
+      redo();
+    } else {
+      undo();
+    }
+  } else if (key === "y") {
+    event.preventDefault();
+    redo();
+  }
+});
+
+/* =====================================================================
+   INITIALISATION
+   ===================================================================== */
+
+setTheme("dark");
+buildGrid();
+applyZoom();
+
 </script>
 
 </body>
