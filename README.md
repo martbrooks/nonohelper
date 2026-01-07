@@ -94,7 +94,7 @@ See the `LICENSE` file for details.
 ## 🚀 Usage
 
 1. Clone or download the repository.
-2. Open `index.html` in any modern desktop browser.
+2. Open `nonohelper.html` in any modern desktop browser.
 3. Start marking up your scratch grid.
 
 No build tools, frameworks, or servers required.
