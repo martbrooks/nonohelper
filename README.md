@@ -1,10 +1,6 @@
 # Nonogram Scratchpad
 
-A simple, browser-based scratchpad to help you solve nonograms more effectively.
-It provides a clean grid you can freely experiment on, without altering your real puzzle.
-No installation needed — just open the HTML file in a browser.
-
----
+A simple, browser-based scratchpad to help you solve nonograms more effectively. It provides a clean, responsive grid that you can freely experiment on without altering your real puzzle. No installation is needed — just open the HTML file in a browser.
 
 ## ✨ What This Tool Does
 
@@ -12,92 +8,100 @@ When solving nonograms, solvers often need “thinking space” to:
 
 - test out possible fills
 - try hypothetical line segments
-- mark areas that definitely *aren’t* filled
-- draw rectangles to test interactions
+- experiment with rectangles or blocks
+- mark areas that definitely aren’t filled
 - zoom in and out on large puzzles
-- undo mistakes quickly
-- avoid scribbling all over the actual puzzle
+- undo mistakes instantly
+- reduce clutter on the real puzzle
 
 This tool provides:
 
-- Any grid size from **5×5** up to **50×50** (rectangular sizes supported)
-- Click-to-fill behaviour:
-  - **Left click:** empty → filled → cross → empty
-  - **Right click:** empty → cross → filled → empty
-- Three marking modes:
-  - **Straight line** (horizontal or vertical)
-  - **Rectangle** (default)
-  - **Freestyle** (cell-by-cell)
-- Drag-to-fill with live region measurement (e.g. “8×3”)
-- **Undo/redo** (buttons + keyboard shortcuts)
-- **Zoom** using Ctrl/Cmd + mouse wheel
-- **Dark and light themes**
+### 🧱 Flexible Grid
+
+- Any size from 5×5 up to 50×50 (rectangular sizes supported)
+- Automatic row and column numbering on all sides for easy navigation
 - Classic nonogram-style thick borders every 5 cells
-- Completely offline and self-contained
+- Automatically scales the grid down so the entire board fits on screen when created
+- Smooth zooming anywhere on the page (mouse wheel)
 
-It’s designed as a companion tool when solving puzzles on paper, on another website, or in a book.
+### 🖱️ Intuitive Cell Interaction
 
----
+- Left click cycles: empty → filled → cross → empty
+- Right click cycles: empty → cross → filled → empty
+
+“Filled” cells show a rounded black inset square.
+“Crossed” cells show a bold red X centred in the cell.
+
+Clicking slightly off a cell (onto a grid line) automatically snaps to the intended target cell.
+
+### ✍️ Multiple Drawing Modes
+
+**Rectangle mode (default)**
+Click and drag to mark regions; a tooltip shows the selected width and height (e.g. "8 × 3") in live preview.
+
+**Line mode**
+Click and drag mostly horizontally to draw horizontal lines, or mostly vertically for vertical lines. The tooltip shows the line length.
+
+**Freestyle mode**
+Draw cell-by-cell, like using a pencil. No rollback within the stroke; changes are batched for undo/redo.
+
+Each mode includes a live preview before committing changes.
+
+### ↩️ Undo / Redo
+
+- Full undo/redo stack (100 actions)
+- Works across all modes
+- Keyboard shortcuts supported: Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y
+
+### 🎨 Themes
+
+- Light and dark mode toggle in the toolbar
+- Dark mode is the default
+- Theme choice is stored and remembered between sessions
+
+### 🧭 Clean Layout
+
+- Page header: "Nonogram Scratchpad"
+- Compact controls panel above the grid
+- Row and column numbers around the grid
+- Footer with GitHub source link
+- Everything scales and moves naturally with zoom
 
 ## 🤝 How This Tool Was Built
-### *A conversational programming experiment*
 
-This project was created by a sysadmin who is **not** a web developer.
+This project was created as a "conversational programming" experiment. The user described behaviour and requirements in natural language, and ChatGPT iteratively refined the code through hundreds of steps.
 
-Instead of manually writing HTML, CSS, or JavaScript, the user described the functionality they wanted — step by step — in natural language. Over many iterations, ChatGPT generated the code, refined it, debugged it, and implemented new features as requested.
+This version includes major enhancements beyond the earlier iteration:
 
-The process looked like this:
+- Row and column numbering
+- Click-snapping on grid lines
+- Auto-fit scaling on grid creation
+- Improved preview logic
+- Rectangle, line, and freestyle drawing modes
+- Undo/redo behaviour
+- Header title
+- Light/dark theme with persistence
+- Full internal refactor for readability and maintainability
 
-1. **Initial concept:**
-   A simple clickable grid for nonogram scratch work.
-
-2. **Progressive feature building:**
-   Through a long, interactive back-and-forth, additional features were requested and implemented:
-   - refined click behaviour
-   - drag-to-fill
-   - line / rectangle selection modes
-   - zooming
-   - dark and light modes
-   - bold aligned crosses
-   - undo/redo history
-   - improved grid rendering using box-shadows
-   - several full-file refactors
-
-3. **Polishing:**
-   Once the behaviour was correct, ChatGPT performed complete refactors to clean up the structure, remove cruft, and ensure consistency.
-
-4. **Final touches:**
-   Licence selection, README drafting, and finishing details were also generated collaboratively.
-
-This repository is therefore an example of **conversational programming** — specifying behaviour in English and shaping the output through discussion.
-
----
+All HTML, CSS, and JavaScript were generated entirely by ChatGPT based on user instructions.
 
 ## 🧠 AI Attribution
 
 For transparency:
 
-- **All code** (HTML, CSS, JavaScript) was generated by ChatGPT.
-- The human collaborator provided requirements, corrections, feedback, and testing.
-- **The README you are reading was also produced as part of the same collaborative chat.**
-
----
+- All code was generated by ChatGPT.
+- The human collaborator provided requirements, testing, and feedback.
+- This README was also generated by ChatGPT.
 
 ## 📝 Licence
 
-This project is released under the **MIT License**, chosen because it is simple, permissive, and well-suited for AI-generated code.
-
-See the `LICENSE` file for details.
-
----
+This project is released under the MIT License.
+See the LICENSE file for details.
 
 ## 🚀 Usage
 
 1. Clone or download the repository.
-2. Open `nonohelper.html` in any modern desktop browser.
-3. Start marking up your scratch grid.
+2. Open the HTML file (e.g. `nonohelper.html`) in any modern desktop browser.
+3. Begin experimenting with the scratch grid.
 
-No build tools, frameworks, or servers required.
-
----
-
+No frameworks, build tools, or servers required.
