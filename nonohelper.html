@@ -1,880 +1,1281 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Nonogram Scratchpad</title>
+  <meta charset="UTF-8" />
+  <title>Nonogram Scratchpad</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      /* Geometry / layout variables */
+      --cell-size: 40px;
 
-<style>
-  :root {
-    --cell-size: 22px;
-    --grid-font: system-ui, -apple-system, "Segoe UI", sans-serif;
-    --grid-bg: rgb(218,210,192);
-    --dark-bg: rgb(29,31,33);
-  }
+      /* Inner grid lines (inside each 5x5 block) */
+      --inner-line: 2px;
 
-  body {
-    font-family: var(--grid-font);
-    max-width: 1000px;
-    margin: 20px auto;
-    padding: 0 16px 40px;
-    background: var(--dark-bg);
-    color: #eee;
-    transition: background 0.15s ease, color 0.15s ease;
-  }
+      /* Block borders maintained at 6px (2px * 3) */
+      --gridlineN: 3;
+      --outer-line: calc(var(--inner-line) * var(--gridlineN));
+      --block-gap: var(--outer-line);
 
-  body[data-theme="light"] {
-    background: #f4f4f8;
-    color: #222;
-  }
+      /* Block layout (set by JS) */
+      --blocks-x: 1;
+      --blocks-y: 1;
 
-  h1 {
-    font-size: 1.5rem;
-    margin-bottom: 0.5rem;
-  }
+      /* Colours (theme-specific via body classes) */
+      --page-bg: #111;
+      --text-colour: #e5e5e5;
+      --controls-bg: #1f2933;
+      --controls-border: #374151;
+      --footer-text: #9ca3af;
+      --link-colour: #93c5fd;
+      --tooltip-bg: rgba(15, 23, 42, 0.9);
+      --tooltip-border: rgba(148, 163, 184, 0.9);
+      --tooltip-text: #e5e7eb;
 
-  /* Controls */
+      --line-colour: rgb(70, 70, 70);
+      --cell-colour: rgb(226, 218, 200);
+      --x-colour: rgb(220, 30, 30);
 
-  .top-bar {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-bottom: 8px;
-  }
+      /* Used-cell inner border thickness and radius (scaled via JS) */
+      --used-border: 2px;
+      --used-radius: 4px;
 
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: center;
-  }
+      /* Not-used X appearance (scaled via JS) */
+      --x-thickness: 4px;
+      --x-margin: 8px;
+    }
 
-  .controls label {
-    font-size: 0.95rem;
-  }
+    /* Dark theme */
+    body.theme-dark {
+      --page-bg: #111827;
+      --text-colour: #e5e7eb;
+      --controls-bg: #1f2933;
+      --controls-border: #374151;
+      --footer-text: #9ca3af;
+      --link-colour: #93c5fd;
+      --tooltip-bg: rgba(15, 23, 42, 0.9);
+      --tooltip-border: rgba(148, 163, 184, 0.9);
+      --tooltip-text: #e5e7eb;
 
-  .controls input[type="number"] {
-    width: 70px;
-    padding: 3px 6px;
-  }
+      --line-colour: rgb(70, 70, 70);
+      --cell-colour: rgb(226, 218, 200);
+      --x-colour: rgb(220, 30, 30);
+    }
 
-  .theme-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.9rem;
-  }
+    /* Light theme */
+    body.theme-light {
+      --page-bg: #f3f4f6;
+      --text-colour: #111827;
+      --controls-bg: #e5e7eb;
+      --controls-border: #9ca3af;
+      --footer-text: #4b5563;
+      --link-colour: #2563eb;
+      --tooltip-bg: rgba(249, 250, 251, 0.98);
+      --tooltip-border: rgba(156, 163, 175, 0.9);
+      --tooltip-text: #111827;
 
-  .theme-toggle label {
-    cursor: pointer;
-  }
+      --line-colour: rgb(90, 90, 90);
+      --cell-colour: rgb(240, 235, 220);
+      --x-colour: rgb(200, 40, 40);
+    }
 
-  .history-controls {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    font-size: 0.85rem;
-  }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-  button {
-    padding: 6px 12px;
-    border-radius: 6px;
-    border: 1px solid #666;
-    background: #333;
-    color: #f5f5f5;
-    cursor: pointer;
-    font-size: 0.95rem;
-    transition: background 0.1s ease, filter 0.1s ease, border-color 0.1s ease;
-  }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 1rem;
+      background: var(--page-bg);
+      font-family: system-ui, sans-serif;
+      color: var(--text-colour);
+      user-select: none;
+    }
 
-  button:hover {
-    filter: brightness(1.1);
-  }
+    .app-header {
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
 
-  button:disabled {
-    opacity: 0.4;
-    cursor: default;
-    filter: none;
-  }
+    .app-header h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: var(--text-colour);
+    }
 
-  body[data-theme="light"] button {
-    background: #f4f4f4;
-    color: #222;
-    border-color: #bbb;
-  }
+    .controls {
+      margin-bottom: 1rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      background: var(--controls-bg);
+      border: 1px solid var(--controls-border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      align-items: center;
+      font-size: 0.9rem;
+    }
 
-  .mode-select {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-  }
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      white-space: nowrap;
+    }
 
-  .mode-select label {
-    cursor: pointer;
-  }
+    .controls input[type="number"] {
+      width: 4rem;
+      padding: 0.1rem 0.25rem;
+      border-radius: 0.25rem;
+      border: 1px solid #4b5563;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 0.9rem;
+    }
 
-  /* Board */
+    body.theme-light .controls input[type="number"] {
+      background: #f9fafb;
+      color: #111827;
+      border-color: #9ca3af;
+    }
 
-  .board-wrapper {
-    overflow: visible;
-    max-height: none;
-  }
+    .controls button {
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.5rem;
+      border: 1px solid #60a5fa;
+      background: #1d4ed8;
+      color: white;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
 
-  .board {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    user-select: none;
-  }
+    .controls button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
 
-  .top-row,
-  .bottom-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 4px;
-  }
+    .controls button:hover:not(:disabled) {
+      background: #2563eb;
+    }
 
-  .middle-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 4px;
-  }
+    .mode-group {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
 
-  .corner {
-    width: var(--cell-size);
-    height: var(--cell-size);
-  }
+    .mode-group label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-size: 0.85rem;
+    }
 
-  .number-row {
-    display: grid;
-  }
+    .undo-redo-group {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
 
-  .number-col {
-    display: grid;
-  }
+    .theme-group {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
 
-  .number-row > div,
-  .number-col > div {
-    font-size: 12px;
-    text-align: center;
-    line-height: var(--cell-size);
-    width: var(--cell-size);
-    height: var(--cell-size);
-    color: #ccc;
-  }
+    .theme-group label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-size: 0.85rem;
+    }
 
-  body[data-theme="light"] .number-row > div,
-  body[data-theme="light"] .number-col > div {
-    color: #444;
-  }
+    /* Board + labels layout */
+    .board-region {
+      display: grid;
+      grid-template-columns: auto auto auto; /* left labels | grid | right labels */
+      grid-template-rows: auto auto auto;    /* top labels | grid row | bottom labels */
+      align-items: center;
+      justify-items: center;
+      gap: 0;
+    }
 
-  .grid {
-    display: grid;
-  }
+    .corner-spacer {
+      width: 1.5rem;
+      height: 1.5rem;
+      pointer-events: none;
+    }
 
-  .cell {
-    width: var(--cell-size);
-    height: var(--cell-size);
-    box-sizing: border-box;
-    border: 1px solid #000;
-    background: var(--grid-bg);
-    cursor: pointer;
-    position: relative;
-    box-shadow: none;
-  }
+    .board-wrapper {
+      grid-row: 2;
+      grid-column: 2;
+      background: var(--line-colour);
+      padding: var(--outer-line);
+      display: inline-block;
+    }
 
-  .cell.filled {
-    background: #000;
-  }
+    .board-blocks {
+      display: grid;
+      grid-template-columns: repeat(var(--blocks-x), auto);
+      grid-template-rows: repeat(var(--blocks-y), auto);
+      gap: var(--block-gap);
+      background: var(--line-colour);
+    }
 
-  .cell.cross {
-    background: var(--grid-bg);
-  }
+    .block-grid {
+      display: grid;
+      grid-template-columns: repeat(5, var(--cell-size));
+      grid-template-rows: repeat(5, var(--cell-size));
+      gap: var(--inner-line);
+      background: var(--line-colour);
+    }
 
-  .cell.cross::after {
-    content: "×";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 20px;
-    font-weight: bold;
-    color: #c00;
-    pointer-events: none;
-  }
+    .cell {
+      width: var(--cell-size);
+      height: var(--cell-size);
+      background: var(--cell-colour);
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
 
-  /* Tooltip */
+    .cell-inner-used {
+      position: absolute;
+      top: var(--used-border);
+      right: var(--used-border);
+      bottom: var(--used-border);
+      left: var(--used-border);
+      background: rgb(0, 0, 0);
+      border-radius: var(--used-radius);
+      display: none;
+      opacity: 1;
+    }
 
-  .selection-tooltip {
-    position: fixed;
-    padding: 2px 6px;
-    font-size: 11px;
-    background: rgba(0, 0, 0, 0.8);
-    color: #fff;
-    border-radius: 4px;
-    pointer-events: none;
-    z-index: 1000;
-    display: none;
-  }
+    .cell-x-line {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: calc(100% - 2 * var(--x-margin));
+      height: var(--x-thickness);
+      background: var(--x-colour);
+      transform-origin: center;
+      display: none;
+      opacity: 1;
+    }
 
-  /* Footer */
+    .cell-x-line-1 { transform: translate(-50%, -50%) rotate(45deg); }
+    .cell-x-line-2 { transform: translate(-50%, -50%) rotate(-45deg); }
 
-  footer {
-    margin-top: 30px;
-    padding-top: 12px;
-    border-top: 1px solid #444;
-    font-size: 0.9rem;
-    text-align: center;
-    color: #bbb;
-  }
+    /* Committed states */
+    .cell.state-used .cell-inner-used {
+      display: block;
+      opacity: 1;
+    }
 
-  body[data-theme="light"] footer {
-    border-top-color: #ccc;
-    color: #555;
-  }
+    .cell.state-not-used .cell-x-line {
+      display: block;
+      opacity: 1;
+    }
 
-  footer a {
-    color: #7abaff;
-    text-decoration: none;
-  }
+    /* Preview states (70% opacity) */
+    .cell.preview-used .cell-inner-used {
+      display: block;
+      opacity: 0.7;
+    }
 
-  footer a:hover {
-    text-decoration: underline;
-  }
-</style>
+    .cell.preview-not-used .cell-x-line {
+      display: block;
+      opacity: 0.7;
+    }
+
+    /* Preview for clearing: show empty cell with an inset border */
+    .cell.preview-clear {
+      box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.5);
+    }
+
+    .cell.preview-clear .cell-inner-used,
+    .cell.preview-clear .cell-x-line {
+      display: none;
+    }
+
+    /* Row/column labels */
+    .col-labels {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      pointer-events: none;
+      display: grid;
+      grid-template-columns: repeat(var(--blocks-x), auto);
+      column-gap: var(--block-gap);
+      grid-row: auto;
+      grid-column: 2;
+    }
+
+    body.theme-light .col-labels {
+      color: #6b7280;
+    }
+
+    .col-label-block {
+      display: grid;
+      grid-template-columns: repeat(5, var(--cell-size));
+      column-gap: var(--inner-line);
+      justify-items: center;
+      align-items: center;
+    }
+
+    .row-labels {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      pointer-events: none;
+      display: grid;
+      grid-template-rows: repeat(var(--blocks-y), auto);
+      row-gap: var(--block-gap);
+      grid-row: 2;
+      grid-column: auto;
+    }
+
+    body.theme-light .row-labels {
+      color: #6b7280;
+    }
+
+    .row-label-block {
+      display: grid;
+      grid-template-rows: repeat(5, var(--cell-size));
+      row-gap: var(--inner-line);
+      justify-items: center;
+      align-items: center;
+    }
+
+    .col-labels-top    { grid-row: 1; }
+    .col-labels-bottom { grid-row: 3; }
+    .row-labels-left   { grid-column: 1; }
+    .row-labels-right  { grid-column: 3; }
+
+    /* Tooltip */
+    .draw-tooltip {
+      position: absolute;
+      padding: 2px 6px;
+      font-size: 1.0rem;
+      background: var(--tooltip-bg);
+      color: var(--tooltip-text);
+      border-radius: 4px;
+      border: 1px solid var(--tooltip-border);
+      pointer-events: none;
+      z-index: 1000;
+      white-space: nowrap;
+      display: none;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      color: var(--footer-text);
+      text-align: center;
+    }
+
+    .footer a {
+      color: var(--link-colour);
+      text-decoration: underline;
+    }
+
+    .footer a:hover {
+      text-decoration: none;
+    }
+  </style>
 </head>
-<body data-theme="dark">
+<body class="theme-dark">
+  <div class="app-header">
+    <h1>Nonogram Scratchpad</h1>
+  </div>
 
-<h1>Nonogram Scratchpad</h1>
-
-<div class="top-bar">
   <div class="controls">
     <label>
-      Columns (width):
-      <input type="number" id="colsInput" min="5" max="50" step="5" value="25">
+      Width (cells):
+      <input type="number" id="widthInput" min="5" max="50" step="5" value="20" />
     </label>
     <label>
-      Rows (height):
-      <input type="number" id="rowsInput" min="5" max="50" step="5" value="25">
+      Height (cells):
+      <input type="number" id="heightInput" min="5" max="50" step="5" value="20" />
     </label>
-    <button id="buildGridBtn">Create / reset grid</button>
-  </div>
+    <button id="applySize">Create / reset grid</button>
 
-  <div class="history-controls">
-    <button id="undoBtn" disabled>Undo</button>
-    <button id="redoBtn" disabled>Redo</button>
-    <span>(Ctrl/Cmd+Z, Ctrl+Y)</span>
-  </div>
-
-  <div class="theme-toggle">
-    <span>Theme:</span>
-    <label><input type="radio" name="theme" value="dark" checked> Dark</label>
-    <label><input type="radio" name="theme" value="light"> Light</label>
-  </div>
-</div>
-
-<div class="mode-select">
-  <span>Selection mode:</span>
-  <label><input type="radio" name="mode" value="line"> Straight line</label>
-  <label><input type="radio" name="mode" value="rect" checked> Rectangle</label>
-  <label><input type="radio" name="mode" value="free"> Freestyle</label>
-</div>
-
-<div class="board-wrapper" id="boardWrapper">
-  <div class="board" id="boardRoot">
-
-    <div class="top-row">
-      <div class="corner"></div>
-      <div id="topNums" class="number-row"></div>
-      <div class="corner"></div>
+    <div class="mode-group">
+      <span>Mode:</span>
+      <label><input type="radio" name="drawMode" value="rectangle" checked /> Rectangle</label>
+      <label><input type="radio" name="drawMode" value="line" /> Line</label>
+      <label><input type="radio" name="drawMode" value="freestyle" /> Freestyle</label>
     </div>
 
-    <div class="middle-row">
-      <div id="leftNums" class="number-col"></div>
-      <div id="grid" class="grid"></div>
-      <div id="rightNums" class="number-col"></div>
+    <div class="undo-redo-group">
+      <button id="undoBtn" disabled>Undo</button>
+      <button id="redoBtn" disabled>Redo</button>
     </div>
 
-    <div class="bottom-row">
-      <div class="corner"></div>
-      <div id="bottomNums" class="number-row"></div>
-      <div class="corner"></div>
+    <div class="theme-group">
+      <span>Theme:</span>
+      <label><input type="radio" name="theme" value="dark" checked /> Dark</label>
+      <label><input type="radio" name="theme" value="light" /> Light</label>
     </div>
-
   </div>
-</div>
-
-<footer>
-  Source available on GitHub:<br>
-  <a href="https://github.com/martbrooks/nonohelper" target="_blank">
-    github.com/martbrooks/nonohelper
-  </a>
-</footer>
-
-<script>
-"use strict";
-
-/* =====================================================================
-   CONSTANTS & CONFIG
-   ===================================================================== */
-
-const BASE_CELL_SIZE = 22;   // px, matches initial --cell-size
-const MIN_SIZE   = 5;
-const MAX_SIZE   = 50;
-const STEP_SIZE  = 5;
-const MIN_ZOOM   = 0.4;
-const MAX_ZOOM   = 3.0;
-const ZOOM_IN_F  = 1.1;
-const ZOOM_OUT_F = 0.9;
-
-const MODE_LINE = "line";
-const MODE_RECT = "rect";
-const MODE_FREE = "free";
-
-const BUTTON_LEFT  = 0;
-const BUTTON_RIGHT = 2;
-
-const STATE_EMPTY  = "empty";
-const STATE_FILLED = "filled";
-const STATE_CROSS  = "cross";
-
-const MAX_HISTORY = 50;
-
-/* =====================================================================
-   DOM REFERENCES
-   ===================================================================== */
-
-const gridElement  = document.getElementById("grid");
-const colsInput    = document.getElementById("colsInput");
-const rowsInput    = document.getElementById("rowsInput");
-const buildBtn     = document.getElementById("buildGridBtn");
-
-const topNums      = document.getElementById("topNums");
-const bottomNums   = document.getElementById("bottomNums");
-const leftNums     = document.getElementById("leftNums");
-const rightNums    = document.getElementById("rightNums");
-
-const boardRoot    = document.getElementById("boardRoot");
-const boardWrapper = document.getElementById("boardWrapper");
-
-const themeRadios  = document.querySelectorAll('input[name="theme"]');
-const modeRadios   = document.querySelectorAll('input[name="mode"]');
-
-const undoBtn      = document.getElementById("undoBtn");
-const redoBtn      = document.getElementById("redoBtn");
-
-const tooltip      = document.createElement("div");
-tooltip.className  = "selection-tooltip";
-document.body.appendChild(tooltip);
-
-/* =====================================================================
-   STATE
-   ===================================================================== */
-
-const state = {
-  selectionMode: MODE_RECT,
-  isMouseDown: false,
-  dragStartRow: null,
-  dragStartCol: null,
-  dragButton: null,
-  dragTargetState: null,
-  cols: 25,
-  rows: 25,
-  previewStates: null,   // for drag previews
-  zoom: 1,
-  history: [],           // undo/redo snapshots
-  historyIndex: -1,
-  changedThisDrag: false
-};
-
-/* =====================================================================
-   GENERIC GRID STATE HELPERS
-   ===================================================================== */
-
-function readGridStates() {
-  const cells = gridElement.children;
-  const states = new Array(cells.length);
-  for (let i = 0; i < cells.length; i++) {
-    states[i] = cells[i].dataset.state || STATE_EMPTY;
-  }
-  return states;
-}
-
-function writeGridStates(states) {
-  if (!states) return;
-  const cells = gridElement.children;
-  if (cells.length !== states.length) return;
-
-  for (let i = 0; i < cells.length; i++) {
-    const cell = cells[i];
-    const s    = states[i];
-
-    cell.dataset.state = s;
-    cell.classList.remove("filled", "cross");
-    if (s === STATE_FILLED) cell.classList.add("filled");
-    if (s === STATE_CROSS)  cell.classList.add("cross");
-
-    applyBoxShadowForState(cell, cell.dataset.gridShadow, s);
-  }
-}
-
-/* =====================================================================
-   BASIC UTILS
-   ===================================================================== */
-
-function clampGridSize(value) {
-  let n = parseInt(value, 10);
-  if (isNaN(n)) n = 25;
-  n = Math.max(MIN_SIZE, Math.min(MAX_SIZE, n));
-  return Math.round(n / STEP_SIZE) * STEP_SIZE;
-}
-
-function getCellState(cell) {
-  return cell.dataset.state || STATE_EMPTY;
-}
-
-function applyBoxShadowForState(cell, baseShadow, newState) {
-  const gridShadow = baseShadow || "";
-  if (newState === STATE_FILLED) {
-    const inset = "inset 0 0 0 2px var(--grid-bg)";
-    cell.style.boxShadow = gridShadow ? `${gridShadow}, ${inset}` : inset;
-  } else {
-    cell.style.boxShadow = gridShadow;
-  }
-}
-
-function setCellState(cell, newState) {
-  const prev = cell.dataset.state || STATE_EMPTY;
-  if (prev === newState) return;
-
-  cell.dataset.state = newState;
-  cell.classList.remove("filled", "cross");
-
-  if (newState === STATE_FILLED) cell.classList.add("filled");
-  if (newState === STATE_CROSS)  cell.classList.add("cross");
-
-  applyBoxShadowForState(cell, cell.dataset.gridShadow, newState);
-  state.changedThisDrag = true;
-}
-
-function nextStateLeft(current) {
-  if (current === STATE_EMPTY)  return STATE_FILLED;
-  if (current === STATE_FILLED) return STATE_CROSS;
-  return STATE_EMPTY;
-}
-
-function nextStateRight(current) {
-  if (current === STATE_EMPTY)  return STATE_CROSS;
-  if (current === STATE_CROSS)  return STATE_FILLED;
-  return STATE_EMPTY;
-}
-
-function indexFromRowCol(row, col) {
-  return row * state.cols + col;
-}
-
-function showTooltip(text, x, y) {
-  tooltip.textContent   = text;
-  tooltip.style.left    = (x + 12) + "px";
-  tooltip.style.top     = (y + 12) + "px";
-  tooltip.style.display = "block";
-}
-
-function hideTooltip() {
-  tooltip.style.display = "none";
-}
-
-function applyZoom() {
-  const newSize = BASE_CELL_SIZE * state.zoom;
-  document.documentElement.style.setProperty("--cell-size", `${newSize}px`);
-}
-
-function setTheme(mode) {
-  document.body.setAttribute("data-theme", mode);
-}
-
-function getDragSize(row, col) {
-  return {
-    width:  Math.abs(col - state.dragStartCol) + 1,
-    height: Math.abs(row - state.dragStartRow) + 1
-  };
-}
-
-/* =====================================================================
-   PREVIEW SNAPSHOT (FOR DRAG)
-   ===================================================================== */
-
-function snapshotPreview() {
-  state.previewStates = readGridStates();
-}
-
-function restorePreview() {
-  if (!state.previewStates) return;
-  writeGridStates(state.previewStates);
-}
-
-/* =====================================================================
-   UNDO / REDO HISTORY
-   ===================================================================== */
-
-function pushHistoryState() {
-  const snapshot = readGridStates();
-
-  if (state.historyIndex < state.history.length - 1) {
-    state.history = state.history.slice(0, state.historyIndex + 1);
-  }
-
-  state.history.push(snapshot);
-
-  if (state.history.length > MAX_HISTORY) {
-    state.history.shift();
-  }
-
-  state.historyIndex = state.history.length - 1;
-  updateHistoryButtons();
-}
-
-function applyHistorySnapshot(index) {
-  if (index < 0 || index >= state.history.length) return;
-  writeGridStates(state.history[index]);
-  state.historyIndex = index;
-  updateHistoryButtons();
-}
-
-function updateHistoryButtons() {
-  undoBtn.disabled = state.historyIndex <= 0;
-  redoBtn.disabled = state.historyIndex >= state.history.length - 1;
-}
-
-function undo() {
-  if (state.historyIndex <= 0) return;
-  applyHistorySnapshot(state.historyIndex - 1);
-}
-
-function redo() {
-  if (state.historyIndex >= state.history.length - 1) return;
-  applyHistorySnapshot(state.historyIndex + 1);
-}
-
-/* =====================================================================
-   NUMBER STRIPS
-   ===================================================================== */
-
-function buildNumberRow(container, count) {
-  container.innerHTML = "";
-  container.style.gridTemplateColumns = `repeat(${count}, var(--cell-size))`;
-  for (let i = 1; i <= count; i++) {
-    const div = document.createElement("div");
-    div.textContent = i;
-    container.appendChild(div);
-  }
-}
-
-function buildNumberCol(container, count) {
-  container.innerHTML = "";
-  container.style.gridTemplateRows = `repeat(${count}, var(--cell-size))`;
-  for (let i = 1; i <= count; i++) {
-    const div = document.createElement("div");
-    div.textContent = i;
-    container.appendChild(div);
-  }
-}
-
-/* =====================================================================
-   GRID BUILDING
-   ===================================================================== */
-
-function computeGridShadow(row, col, rows, cols) {
-  const shadows = [];
-
-  // Outer borders: thickness 3 (1px border + 2px shadows)
-  if (row === 0)      shadows.push("0 -1px 0 0 #000", "0 -2px 0 0 #000");
-  if (row === rows-1) shadows.push("0 1px 0 0 #000",  "0 2px 0 0 #000");
-  if (col === 0)      shadows.push("-1px 0 0 0 #000", "-2px 0 0 0 #000");
-  if (col === cols-1) shadows.push("1px 0 0 0 #000",  "2px 0 0 0 #000");
-
-  // Internal 5×5 boundaries: thick lines, same as outer border thickness
-  if (row > 0 && row % 5 === 0) {
-    shadows.push("0 -1px 0 0 #000", "0 -2px 0 0 #000");
-  }
-  if (col > 0 && col % 5 === 0) {
-    shadows.push("-1px 0 0 0 #000", "-2px 0 0 0 #000");
-  }
-
-  return shadows.join(", ");
-}
-
-function buildGrid() {
-  const cols = clampGridSize(colsInput.value);
-  const rows = clampGridSize(rowsInput.value);
-
-  colsInput.value = cols;
-  rowsInput.value = rows;
-
-  state.cols = cols;
-  state.rows = rows;
-
-  buildNumberRow(topNums, cols);
-  buildNumberRow(bottomNums, cols);
-  buildNumberCol(leftNums, rows);
-  buildNumberCol(rightNums, rows);
-
-  gridElement.innerHTML = "";
-  gridElement.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
-
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cell = document.createElement("div");
-      cell.className = "cell";
-      cell.dataset.state = STATE_EMPTY;
-      cell.dataset.row = String(r);
-      cell.dataset.col = String(c);
-
-      const shadow = computeGridShadow(r, c, rows, cols);
-      cell.dataset.gridShadow = shadow;
-      applyBoxShadowForState(cell, shadow, STATE_EMPTY);
-
-      cell.addEventListener("mousedown", onCellMouseDown);
-      cell.addEventListener("mouseenter", onCellMouseEnter);
-
-      gridElement.appendChild(cell);
-    }
-  }
-
-  state.history = [];
-  state.historyIndex = -1;
-  pushHistoryState();
-}
-
-/* =====================================================================
-   DRAWING (LINE / RECT)
-   ===================================================================== */
-
-function drawLineTo(row, col) {
-  const dr = row - state.dragStartRow;
-  const dc = col - state.dragStartCol;
-
-  if (Math.abs(dr) >= Math.abs(dc)) {
-    const r1 = Math.min(state.dragStartRow, row);
-    const r2 = Math.max(state.dragStartRow, row);
-    for (let r = r1; r <= r2; r++) {
-      const idx = indexFromRowCol(r, state.dragStartCol);
-      setCellState(gridElement.children[idx], state.dragTargetState);
-    }
-  } else {
-    const c1 = Math.min(state.dragStartCol, col);
-    const c2 = Math.max(state.dragStartCol, col);
-    for (let c = c1; c <= c2; c++) {
-      const idx = indexFromRowCol(state.dragStartRow, c);
-      setCellState(gridElement.children[idx], state.dragTargetState);
-    }
-  }
-}
-
-function drawRectTo(row, col) {
-  const r1 = Math.min(state.dragStartRow, row);
-  const r2 = Math.max(state.dragStartRow, row);
-  const c1 = Math.min(state.dragStartCol, col);
-  const c2 = Math.max(state.dragStartCol, col);
-
-  for (let r = r1; r <= r2; r++) {
-    for (let c = c1; c <= c2; c++) {
-      const idx = indexFromRowCol(r, c);
-      setCellState(gridElement.children[idx], state.dragTargetState);
-    }
-  }
-}
-
-/* =====================================================================
-   CELL EVENT HANDLERS
-   ===================================================================== */
-
-function onCellMouseDown(event) {
-  if (event.button !== BUTTON_LEFT && event.button !== BUTTON_RIGHT) return;
-
-  event.preventDefault();
-  hideTooltip();
-
-  const cell = event.currentTarget;
-  const row  = Number(cell.dataset.row);
-  const col  = Number(cell.dataset.col);
-
-  const current = getCellState(cell);
-  const next    = (event.button === BUTTON_LEFT)
-                    ? nextStateLeft(current)
-                    : nextStateRight(current);
-
-  state.changedThisDrag = false;
-
-  setCellState(cell, next);
-
-  state.isMouseDown     = true;
-  state.dragButton      = event.button;
-  state.dragStartRow    = row;
-  state.dragStartCol    = col;
-  state.dragTargetState = next;
-
-  if (state.selectionMode === MODE_FREE) {
-    state.previewStates = null;
-    return;
-  }
-
-  snapshotPreview();
-  showTooltip("1x1", event.clientX, event.clientY);
-}
-
-function onCellMouseEnter(event) {
-  if (!state.isMouseDown) return;
-
-  const cell = event.currentTarget;
-  const row  = Number(cell.dataset.row);
-  const col  = Number(cell.dataset.col);
-
-  if (state.selectionMode === MODE_FREE) {
-    const current = getCellState(cell);
-    const next    = (state.dragButton === BUTTON_LEFT)
-                      ? nextStateLeft(current)
-                      : nextStateRight(current);
-    setCellState(cell, next);
-    return;
-  }
-
-  restorePreview();
-
-  if (state.selectionMode === MODE_LINE) {
-    drawLineTo(row, col);
-  } else {
-    drawRectTo(row, col);
-  }
-}
-
-/* =====================================================================
-   TOOLTIP FOLLOWING
-   ===================================================================== */
-
-gridElement.addEventListener("mousemove", (event) => {
-  if (!state.isMouseDown || state.selectionMode === MODE_FREE) {
-    hideTooltip();
-    return;
-  }
-
-  const cell = event.target.closest(".cell");
-  if (!cell) return;
-
-  const row = Number(cell.dataset.row);
-  const col = Number(cell.dataset.col);
-
-  let { width, height } = getDragSize(row, col);
-
-  if (state.selectionMode === MODE_LINE) {
-    const dr = row - state.dragStartRow;
-    const dc = col - state.dragStartCol;
-    if (Math.abs(dr) >= Math.abs(dc)) {
-      width  = 1;
-      height = Math.abs(dr) + 1;
-    } else {
-      width  = Math.abs(dc) + 1;
-      height = 1;
-    }
-  }
-
-  showTooltip(`${width}x${height}`, event.clientX, event.clientY);
-});
-
-/* =====================================================================
-   GLOBAL EVENTS
-   ===================================================================== */
-
-document.addEventListener("mouseup", () => {
-  if (state.isMouseDown && state.changedThisDrag) {
-    pushHistoryState();
-  }
-
-  state.isMouseDown     = false;
-  state.dragStartRow    = null;
-  state.dragStartCol    = null;
-  state.dragButton      = null;
-  state.dragTargetState = null;
-  state.previewStates   = null;
-  state.changedThisDrag = false;
-  hideTooltip();
-});
-
-gridElement.addEventListener("contextmenu", (event) => {
-  event.preventDefault();
-});
-
-/* Zoom: mouse wheel over grid area */
-boardWrapper.addEventListener("wheel", (event) => {
-  event.preventDefault();
-  const delta  = event.deltaY || 0;
-  const factor = delta < 0 ? ZOOM_IN_F : ZOOM_OUT_F;
-
-  state.zoom *= factor;
-  state.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, state.zoom));
-  applyZoom();
-}, { passive: false });
-
-/* Mode switching */
-modeRadios.forEach(radio => {
-  radio.addEventListener("change", () => {
-    if (!radio.checked) return;
-    state.selectionMode = radio.value;
-    if (state.selectionMode === MODE_FREE) hideTooltip();
-  });
-});
-
-/* Theme switching */
-themeRadios.forEach(radio => {
-  radio.addEventListener("change", () => {
-    if (!radio.checked) return;
-    setTheme(radio.value);
-  });
-});
-
-/* Build/reset */
-buildBtn.addEventListener("click", () => {
-  hideTooltip();
-  buildGrid();
-});
-
-/* Undo/Redo buttons */
-undoBtn.addEventListener("click", undo);
-redoBtn.addEventListener("click", redo);
-
-/* Keyboard shortcuts: Ctrl/Cmd+Z, Ctrl+Y, Ctrl+Shift+Z */
-document.addEventListener("keydown", (event) => {
-  const ctrlOrCmd = event.ctrlKey || event.metaKey;
-  if (!ctrlOrCmd) return;
-
-  const key = event.key.toLowerCase();
-
-  if (key === "z") {
-    event.preventDefault();
-    if (event.shiftKey) {
-      redo();
-    } else {
-      undo();
-    }
-  } else if (key === "y") {
-    event.preventDefault();
-    redo();
-  }
-});
-
-/* =====================================================================
-   INITIALISATION
-   ===================================================================== */
-
-setTheme("dark");
-buildGrid();
-applyZoom();
-
-</script>
 
+  <div class="board-region">
+    <div class="corner-spacer"></div>
+    <div class="col-labels col-labels-top" id="colLabelsTop"></div>
+    <div class="corner-spacer"></div>
+
+    <div class="row-labels row-labels-left" id="rowLabelsLeft"></div>
+
+    <div class="board-wrapper">
+      <div class="board-blocks" id="board"></div>
+    </div>
+
+    <div class="row-labels row-labels-right" id="rowLabelsRight"></div>
+
+    <div class="corner-spacer"></div>
+    <div class="col-labels col-labels-bottom" id="colLabelsBottom"></div>
+    <div class="corner-spacer"></div>
+  </div>
+
+  <div class="footer">
+    Source available on GitHub:
+    <a href="https://github.com/martbrooks/nonohelper" target="_blank" rel="noopener noreferrer">
+      https://github.com/martbrooks/nonohelper
+    </a>
+  </div>
+
+  <div id="drawTooltip" class="draw-tooltip"></div>
+
+  <script>
+    (function () {
+      /* ---------------------------------------------------------
+       * DOM references
+       * --------------------------------------------------------- */
+      const root         = document.documentElement;
+      const bodyEl       = document.body;
+      const board        = document.getElementById("board");
+      const widthInput   = document.getElementById("widthInput");
+      const heightInput  = document.getElementById("heightInput");
+      const applyBtn     = document.getElementById("applySize");
+      const tooltipEl    = document.getElementById("drawTooltip");
+      const modeRadios   = document.querySelectorAll('input[name="drawMode"]');
+      const undoBtn      = document.getElementById("undoBtn");
+      const redoBtn      = document.getElementById("redoBtn");
+      const controlsEl   = document.querySelector(".controls");
+      const boardWrapper = document.querySelector(".board-wrapper");
+      const boardRegion  = document.querySelector(".board-region");
+
+      const colLabelsTop    = document.getElementById("colLabelsTop");
+      const colLabelsBottom = document.getElementById("colLabelsBottom");
+      const rowLabelsLeft   = document.getElementById("rowLabelsLeft");
+      const rowLabelsRight  = document.getElementById("rowLabelsRight");
+      const themeRadios     = document.querySelectorAll('input[name="theme"]');
+
+      /* ---------------------------------------------------------
+       * Constants
+       * --------------------------------------------------------- */
+      const MIN_CELLS = 5, MAX_CELLS = 50, STEP = 5;
+      const CELLS_PER_BLOCK = 5;
+
+      const BASE_CELL_SIZE    = 40;
+      const BASE_USED_BORDER  = 2;
+      const MIN_USED_BORDER   = 1;
+      const BASE_USED_RADIUS  = 4;
+      const MIN_USED_RADIUS   = 1;
+      const BASE_X_THICKNESS  = 4;
+      const MIN_X_THICKNESS   = 1;
+      const X_MARGIN_RATIO    = 0.2;
+
+      const UNDO_LIMIT        = 100;
+      const ZOOM_MIN_CELL     = 16;
+      const ZOOM_MAX_CELL     = 80;
+      const ZOOM_STEP         = 2;
+
+      const INNER_LINE_PX     = 2;
+      const BLOCK_GAP_PX      = INNER_LINE_PX * 3;
+
+      const THEME_STORAGE_KEY = "nonohelper-theme";
+
+      /* ---------------------------------------------------------
+       * Mutable state
+       * --------------------------------------------------------- */
+      let colsCount   = 20;
+      let rowsCount   = 20;
+      let blocksX     = 1;
+      let blocksY     = 1;
+      let cellSize    = BASE_CELL_SIZE;
+
+      let currentMode = "rectangle";
+
+      let isDrawing       = false;
+      let drawingButton   = null;
+      let drawingMode     = null;
+      let startCell       = null;
+      let startCol        = null;
+      let startRow        = null;
+      let fillState       = null;
+      let lastHoverCell   = null;
+
+      let previewCells    = [];
+
+      let undoStack       = [];
+      let redoStack       = [];
+      let currentActionChanges = null;
+
+      /* ---------------------------------------------------------
+       * Theme helpers
+       * --------------------------------------------------------- */
+
+      function applyTheme(theme) {
+        if (theme !== "dark" && theme !== "light") {
+          theme = "dark";
+        }
+        bodyEl.classList.remove("theme-dark", "theme-light");
+        bodyEl.classList.add("theme-" + theme);
+        try {
+          localStorage.setItem(THEME_STORAGE_KEY, theme);
+        } catch (e) {
+          // ignore storage errors
+        }
+
+        themeRadios.forEach(r => {
+          r.checked = (r.value === theme);
+        });
+      }
+
+      function initTheme() {
+        let theme = "dark";
+        try {
+          const stored = localStorage.getItem(THEME_STORAGE_KEY);
+          if (stored === "dark" || stored === "light") {
+            theme = stored;
+          }
+        } catch (e) {
+          // ignore
+        }
+        applyTheme(theme);
+      }
+
+      /* ---------------------------------------------------------
+       * Utility functions
+       * --------------------------------------------------------- */
+
+      function normaliseCells(v) {
+        let n = parseInt(v, 10);
+        if (isNaN(n)) n = MIN_CELLS;
+        n = Math.round(n / STEP) * STEP;
+        return Math.min(MAX_CELLS, Math.max(MIN_CELLS, n));
+      }
+
+      function updateScaleVars(size) {
+        const scale = size / BASE_CELL_SIZE;
+
+        let usedBorder = BASE_USED_BORDER * scale;
+        if (usedBorder < MIN_USED_BORDER) usedBorder = MIN_USED_BORDER;
+        root.style.setProperty("--used-border", usedBorder + "px");
+
+        let usedRadius = BASE_USED_RADIUS * scale;
+        if (usedRadius < MIN_USED_RADIUS) usedRadius = MIN_USED_RADIUS;
+        root.style.setProperty("--used-radius", usedRadius + "px");
+
+        let xThick = BASE_X_THICKNESS * scale;
+        if (xThick < MIN_X_THICKNESS) xThick = MIN_X_THICKNESS;
+        root.style.setProperty("--x-thickness", xThick + "px");
+
+        const xMargin = X_MARGIN_RATIO * size;
+        root.style.setProperty("--x-margin", xMargin + "px");
+      }
+
+      function setCellState(cell, state) {
+        cell.dataset.state = state;
+        cell.classList.remove("state-clear", "state-used", "state-not-used");
+        cell.classList.add("state-" + state);
+      }
+
+      function getCell(row, col) {
+        return board.querySelector(
+          `.cell[data-row="${row}"][data-col="${col}"]`
+        );
+      }
+
+      function cycleForward(cell) {
+        const s = cell.dataset.state || "clear";
+        const next =
+          s === "clear" ? "used" :
+          s === "used" ? "not-used" : "clear";
+        setCellState(cell, next);
+      }
+
+      function cycleBackward(cell) {
+        const s = cell.dataset.state || "clear";
+        const next =
+          s === "clear" ? "not-used" :
+          s === "not-used" ? "used" : "clear";
+        setCellState(cell, next);
+      }
+
+      /* ---------------------------------------------------------
+       * Tooltip helpers
+       * --------------------------------------------------------- */
+
+      function showTooltip(text, pageX, pageY) {
+        tooltipEl.textContent = text;
+        tooltipEl.style.left = (pageX + 10) + "px";
+        tooltipEl.style.top  = (pageY + 10) + "px";
+        tooltipEl.style.display = "block";
+      }
+
+      function hideTooltip() {
+        tooltipEl.style.display = "none";
+      }
+
+      /* ---------------------------------------------------------
+       * Preview helpers
+       * --------------------------------------------------------- */
+
+      function clearPreviews() {
+        previewCells.forEach(cell => {
+          cell.classList.remove("preview-used", "preview-not-used", "preview-clear");
+        });
+        previewCells = [];
+      }
+
+      function applyPreview(cells) {
+        clearPreviews();
+        cells.forEach(cell => {
+          if (cell === startCell) return;
+          if (fillState === "used") {
+            cell.classList.add("preview-used");
+          } else if (fillState === "not-used") {
+            cell.classList.add("preview-not-used");
+          } else if (fillState === "clear") {
+            cell.classList.add("preview-clear");
+          }
+          previewCells.push(cell);
+        });
+      }
+
+      /* ---------------------------------------------------------
+       * Geometry helpers
+       * --------------------------------------------------------- */
+
+      function computeRectangleCells(startR, startC, endR, endC) {
+        const minR = Math.max(0, Math.min(startR, endR));
+        const maxR = Math.min(rowsCount - 1, Math.max(startR, endR));
+        const minC = Math.max(0, Math.min(startC, endC));
+        const maxC = Math.min(colsCount - 1, Math.max(startC, endC));
+        const cells = [];
+        for (let r = minR; r <= maxR; r++) {
+          for (let c = minC; c <= maxC; c++) {
+            const cell = getCell(r, c);
+            if (cell) cells.push(cell);
+          }
+        }
+        return { cells, width: maxC - minC + 1, height: maxR - minR + 1 };
+      }
+
+      function computeLineCells(startR, startC, endR, endC) {
+        let cells = [];
+        let length = 1;
+        const dx = endC - startC;
+        const dy = endR - startR;
+
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          const minC = Math.max(0, Math.min(startC, endC));
+          const maxC = Math.min(colsCount - 1, Math.max(startC, endC));
+          for (let c = minC; c <= maxC; c++) {
+            const cell = getCell(startR, c);
+            if (cell) cells.push(cell);
+          }
+          length = maxC - minC + 1;
+        } else {
+          const minR = Math.max(0, Math.min(startR, endR));
+          const maxR = Math.min(rowsCount - 1, Math.max(startR, endR));
+          for (let r = minR; r <= maxR; r++) {
+            const cell = getCell(r, startC);
+            if (cell) cells.push(cell);
+          }
+          length = maxR - minR + 1;
+        }
+
+        return { cells, length };
+      }
+
+      /* ---------------------------------------------------------
+       * Undo / redo helpers
+       * --------------------------------------------------------- */
+
+      function updateUndoRedoButtons() {
+        undoBtn.disabled = undoStack.length === 0;
+        redoBtn.disabled = redoStack.length === 0;
+      }
+
+      function finalizeAction() {
+        if (!currentActionChanges || currentActionChanges.size === 0) {
+          currentActionChanges = null;
+          return;
+        }
+        const changes = Array.from(currentActionChanges.values());
+        undoStack.push({ changes });
+        if (undoStack.length > UNDO_LIMIT) {
+          undoStack.shift();
+        }
+        redoStack = [];
+        currentActionChanges = null;
+        updateUndoRedoButtons();
+      }
+
+      function undo() {
+        if (isDrawing) return;
+        const action = undoStack.pop();
+        if (!action) {
+          updateUndoRedoButtons();
+          return;
+        }
+        clearPreviews();
+        hideTooltip();
+        action.changes.forEach(ch => {
+          const cell = getCell(ch.row, ch.col);
+          if (cell) setCellState(cell, ch.prevState);
+        });
+        redoStack.push(action);
+        updateUndoRedoButtons();
+      }
+
+      function redo() {
+        if (isDrawing) return;
+        const action = redoStack.pop();
+        if (!action) {
+          updateUndoRedoButtons();
+          return;
+        }
+        clearPreviews();
+        hideTooltip();
+        action.changes.forEach(ch => {
+          const cell = getCell(ch.row, ch.col);
+          if (cell) setCellState(cell, ch.newState);
+        });
+        undoStack.push(action);
+        updateUndoRedoButtons();
+      }
+
+      function trackCellChange(cell, newState) {
+        if (!currentActionChanges) return;
+        const prevState = cell.dataset.state || "clear";
+        if (prevState === newState) return;
+
+        const row = parseInt(cell.dataset.row, 10);
+        const col = parseInt(cell.dataset.col, 10);
+        const key = row + "," + col;
+
+        let entry = currentActionChanges.get(key);
+        if (!entry) {
+          entry = { row, col, prevState, newState };
+          currentActionChanges.set(key, entry);
+        } else {
+          entry.newState = newState;
+        }
+
+        setCellState(cell, newState);
+      }
+
+      function commitCells(cells) {
+        cells.forEach(cell => trackCellChange(cell, fillState));
+      }
+
+      /* ---------------------------------------------------------
+       * Coordinate → cell snapping
+       * --------------------------------------------------------- */
+
+      function getIndexInDirection(pos, blocksCount, blockSize, blockGap, cellsPerBlock) {
+        const bandSize = blockSize + blockGap;
+        let blockIndex = Math.floor(pos / bandSize);
+        if (blockIndex < 0) blockIndex = 0;
+        if (blockIndex >= blocksCount) blockIndex = blocksCount - 1;
+
+        let posInBand = pos - blockIndex * bandSize;
+
+        if (posInBand > blockSize) {
+          if (blockIndex < blocksCount - 1) {
+            const distIntoGap = posInBand - blockSize;
+            const distToLeftEdge  = distIntoGap;
+            const distToRightEdge = blockGap - distIntoGap;
+            if (distToRightEdge < distToLeftEdge) {
+              blockIndex++;
+              posInBand = 0;
+            } else {
+              posInBand = blockSize - 0.001;
+            }
+          } else {
+            posInBand = blockSize - 0.001;
+          }
+        }
+
+        const posInBlock = Math.max(0, Math.min(posInBand, blockSize - 0.001));
+        const laneSize = cellSize + INNER_LINE_PX;
+
+        let cellInBlock = 0;
+        for (let c = 0; c < cellsPerBlock; c++) {
+          const cellStart = c * laneSize;
+          const cellEnd   = cellStart + cellSize;
+          let regionStart = cellStart - INNER_LINE_PX / 2;
+          let regionEnd   = cellEnd + INNER_LINE_PX / 2;
+
+          if (c === 0) regionStart = 0;
+          if (c === cellsPerBlock - 1) regionEnd = blockSize;
+
+          if (posInBlock >= regionStart && posInBlock < regionEnd) {
+            cellInBlock = c;
+            break;
+          }
+        }
+
+        return blockIndex * cellsPerBlock + cellInBlock;
+      }
+
+      function getCellFromClickEvent(event) {
+        const rect = board.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+          return null;
+        }
+
+        const blockWidth  = CELLS_PER_BLOCK * cellSize + (CELLS_PER_BLOCK - 1) * INNER_LINE_PX;
+        const blockHeight = CELLS_PER_BLOCK * cellSize + (CELLS_PER_BLOCK - 1) * INNER_LINE_PX;
+
+        const colIndex = getIndexInDirection(
+          x, blocksX, blockWidth, BLOCK_GAP_PX, CELLS_PER_BLOCK
+        );
+        const rowIndex = getIndexInDirection(
+          y, blocksY, blockHeight, BLOCK_GAP_PX, CELLS_PER_BLOCK
+        );
+
+        return getCell(rowIndex, colIndex);
+      }
+
+      /* ---------------------------------------------------------
+       * Auto-fit board to viewport (on grid creation)
+       * --------------------------------------------------------- */
+
+      function autoFitBoardToViewport() {
+        if (!boardRegion || !controlsEl) return;
+
+        const margin = 20;
+
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+        const controlsRect = controlsEl.getBoundingClientRect();
+
+        const availableWidth = Math.max(200, viewportWidth - margin * 2);
+
+        let availableHeight = viewportHeight - controlsRect.bottom - margin * 2;
+        if (availableHeight < 150) availableHeight = 150;
+
+        let rect = boardRegion.getBoundingClientRect();
+
+        if (rect.width <= availableWidth && rect.height <= availableHeight) {
+          return;
+        }
+
+        let changed = false;
+
+        while (
+          (rect.width > availableWidth || rect.height > availableHeight) &&
+          cellSize > ZOOM_MIN_CELL
+        ) {
+          cellSize = Math.max(ZOOM_MIN_CELL, cellSize - ZOOM_STEP);
+          root.style.setProperty("--cell-size", cellSize + "px");
+          updateScaleVars(cellSize);
+          rect = boardRegion.getBoundingClientRect();
+          changed = true;
+        }
+
+        if (changed) {
+          // preview/undo/etc unaffected by size
+        }
+      }
+
+      /* ---------------------------------------------------------
+       * Label builders
+       * --------------------------------------------------------- */
+
+      function buildColumnLabels(container) {
+        container.innerHTML = "";
+        container.style.setProperty("--blocks-x", blocksX);
+
+        for (let bx = 0; bx < blocksX; bx++) {
+          const block = document.createElement("div");
+          block.className = "col-label-block";
+
+          for (let i = 0; i < CELLS_PER_BLOCK; i++) {
+            const globalCol = bx * CELLS_PER_BLOCK + i;
+            const span = document.createElement("div");
+            if (globalCol < colsCount) {
+              span.textContent = String(globalCol + 1);
+            } else {
+              span.textContent = "";
+            }
+            block.appendChild(span);
+          }
+
+          container.appendChild(block);
+        }
+      }
+
+      function buildRowLabels(container) {
+        container.innerHTML = "";
+        container.style.setProperty("--blocks-y", blocksY);
+
+        for (let by = 0; by < blocksY; by++) {
+          const block = document.createElement("div");
+          block.className = "row-label-block";
+
+          for (let i = 0; i < CELLS_PER_BLOCK; i++) {
+            const globalRow = by * CELLS_PER_BLOCK + i;
+            const span = document.createElement("div");
+            if (globalRow < rowsCount) {
+              span.textContent = String(globalRow + 1);
+            } else {
+              span.textContent = "";
+            }
+            block.appendChild(span);
+          }
+
+          container.appendChild(block);
+        }
+      }
+
+      function rebuildLabels() {
+        if (!colLabelsTop || !colLabelsBottom || !rowLabelsLeft || !rowLabelsRight) return;
+        buildColumnLabels(colLabelsTop);
+        buildColumnLabels(colLabelsBottom);
+        buildRowLabels(rowLabelsLeft);
+        buildRowLabels(rowLabelsRight);
+      }
+
+      /* ---------------------------------------------------------
+       * Drawing event handlers
+       * --------------------------------------------------------- */
+
+      function onBoardMouseDown(event) {
+        if (event.button !== 0 && event.button !== 2) return;
+        event.preventDefault();
+
+        let cell = event.target.closest(".cell");
+        if (!cell || !board.contains(cell)) {
+          cell = getCellFromClickEvent(event);
+          if (!cell) return;
+        }
+
+        isDrawing     = true;
+        drawingButton = event.button;
+        drawingMode   = currentMode;
+        startCell     = cell;
+        startCol      = parseInt(cell.dataset.col, 10);
+        startRow      = parseInt(cell.dataset.row, 10);
+        lastHoverCell = cell;
+
+        clearPreviews();
+        hideTooltip();
+
+        currentActionChanges = new Map();
+
+        const oldState = cell.dataset.state || "clear";
+        if (drawingButton === 0) {
+          cycleForward(cell);
+        } else if (drawingButton === 2) {
+          cycleBackward(cell);
+        }
+        const newState = cell.dataset.state || "clear";
+        fillState = newState;
+
+        if (oldState !== newState) {
+          const key = startRow + "," + startCol;
+          currentActionChanges.set(key, {
+            row: startRow,
+            col: startCol,
+            prevState: oldState,
+            newState: newState
+          });
+        }
+
+        if (drawingMode === "freestyle") {
+          return;
+        }
+
+        const pageX = event.pageX;
+        const pageY = event.pageY;
+
+        if (drawingMode === "rectangle") {
+          const { cells, width, height } = computeRectangleCells(
+            startRow,
+            startCol,
+            startRow,
+            startCol
+          );
+          applyPreview(cells);
+          showTooltip(width + " x " + height, pageX, pageY);
+        } else if (drawingMode === "line") {
+          const { cells, length } = computeLineCells(
+            startRow,
+            startCol,
+            startRow,
+            startCol
+          );
+          applyPreview(cells);
+          showTooltip(String(length), pageX, pageY);
+        }
+      }
+
+      function onBoardMouseMove(event) {
+        if (!isDrawing) return;
+
+        const cell = event.target.closest(".cell");
+        if (cell && board.contains(cell)) {
+          lastHoverCell = cell;
+        }
+
+        if (drawingMode === "freestyle") {
+          if (cell && board.contains(cell)) {
+            trackCellChange(cell, fillState);
+          }
+          return;
+        }
+
+        if (!lastHoverCell) return;
+
+        const endCol = parseInt(lastHoverCell.dataset.col, 10);
+        const endRow = parseInt(lastHoverCell.dataset.row, 10);
+
+        const pageX = event.pageX;
+        const pageY = event.pageY;
+
+        if (drawingMode === "rectangle") {
+          const { cells, width, height } = computeRectangleCells(
+            startRow,
+            startCol,
+            endRow,
+            endCol
+          );
+          applyPreview(cells);
+          showTooltip(width + " x " + height, pageX, pageY);
+        } else if (drawingMode === "line") {
+          const { cells, length } = computeLineCells(
+            startRow,
+            startCol,
+            endRow,
+            endCol
+          );
+          applyPreview(cells);
+          showTooltip(String(length), pageX, pageY);
+        }
+      }
+
+      function onWindowMouseUp() {
+        if (!isDrawing) return;
+
+        if (drawingMode === "rectangle" || drawingMode === "line") {
+          if (lastHoverCell) {
+            const endCol = parseInt(lastHoverCell.dataset.col, 10);
+            const endRow = parseInt(lastHoverCell.dataset.row, 10);
+
+            if (drawingMode === "rectangle") {
+              const { cells } = computeRectangleCells(
+                startRow,
+                startCol,
+                endRow,
+                endCol
+              );
+              commitCells(cells);
+            } else {
+              const { cells } = computeLineCells(
+                startRow,
+                startCol,
+                endRow,
+                endCol
+              );
+              commitCells(cells);
+            }
+          }
+          clearPreviews();
+          hideTooltip();
+          finalizeAction();
+        } else if (drawingMode === "freestyle") {
+          finalizeAction();
+        }
+
+        isDrawing     = false;
+        drawingButton = null;
+        drawingMode   = null;
+        startCell     = null;
+        startCol      = null;
+        startRow      = null;
+        fillState     = null;
+        lastHoverCell = null;
+      }
+
+      /* ---------------------------------------------------------
+       * Board construction
+       * --------------------------------------------------------- */
+
+      function buildBoard(cols, rows) {
+        colsCount = cols;
+        rowsCount = rows;
+
+        blocksX = cols / CELLS_PER_BLOCK;
+        blocksY = rows / CELLS_PER_BLOCK;
+
+        root.style.setProperty("--blocks-x", blocksX);
+        root.style.setProperty("--blocks-y", blocksY);
+
+        board.innerHTML = "";
+
+        for (let by = 0; by < blocksY; by++) {
+          for (let bx = 0; bx < blocksX; bx++) {
+            const block = document.createElement("div");
+            block.className = "block-grid";
+
+            for (let i = 0; i < CELLS_PER_BLOCK * CELLS_PER_BLOCK; i++) {
+              const cell = document.createElement("div");
+              cell.className = "cell";
+
+              const rowInBlock = Math.floor(i / CELLS_PER_BLOCK);
+              const colInBlock = i % CELLS_PER_BLOCK;
+              const globalRow = by * CELLS_PER_BLOCK + rowInBlock;
+              const globalCol = bx * CELLS_PER_BLOCK + colInBlock;
+
+              cell.dataset.row = String(globalRow);
+              cell.dataset.col = String(globalCol);
+
+              const usedInner = document.createElement("div");
+              usedInner.className = "cell-inner-used";
+
+              const x1 = document.createElement("div");
+              x1.className = "cell-x-line cell-x-line-1";
+
+              const x2 = document.createElement("div");
+              x2.className = "cell-x-line cell-x-line-2";
+
+              cell.append(usedInner, x1, x2);
+
+              setCellState(cell, "clear");
+              block.appendChild(cell);
+            }
+
+            board.appendChild(block);
+          }
+        }
+
+        rebuildLabels();
+      }
+
+      /* ---------------------------------------------------------
+       * Initial setup
+       * --------------------------------------------------------- */
+
+      initTheme();
+      buildBoard(20, 20);
+      updateScaleVars(cellSize);
+      updateUndoRedoButtons();
+      autoFitBoardToViewport();
+
+      /* ---------------------------------------------------------
+       * Control wiring
+       * --------------------------------------------------------- */
+
+      applyBtn.addEventListener("click", () => {
+        const cols = normaliseCells(widthInput.value);
+        const rows = normaliseCells(heightInput.value);
+        widthInput.value = cols;
+        heightInput.value = rows;
+
+        isDrawing = false;
+        drawingButton = null;
+        drawingMode = null;
+        startCell = null;
+        startCol = null;
+        startRow = null;
+        fillState = null;
+        lastHoverCell = null;
+        currentActionChanges = null;
+        undoStack = [];
+        redoStack = [];
+        updateUndoRedoButtons();
+        clearPreviews();
+        hideTooltip();
+
+        buildBoard(cols, rows);
+        updateScaleVars(cellSize);
+        autoFitBoardToViewport();
+      });
+
+      modeRadios.forEach(radio => {
+        radio.addEventListener("change", () => {
+          if (radio.checked) {
+            currentMode = radio.value;
+          }
+        });
+      });
+
+      undoBtn.addEventListener("click", undo);
+      redoBtn.addEventListener("click", redo);
+
+      board.addEventListener("contextmenu", e => e.preventDefault());
+
+      board.addEventListener("mousedown", onBoardMouseDown);
+      board.addEventListener("mousemove", onBoardMouseMove);
+      window.addEventListener("mouseup", onWindowMouseUp);
+
+      window.addEventListener("keydown", e => {
+        const tag = e.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) {
+          return;
+        }
+
+        const key = e.key.toLowerCase();
+        const isCtrl = e.ctrlKey || e.metaKey;
+        if (!isCtrl) return;
+
+        if (key === "z" && !e.shiftKey) {
+          e.preventDefault();
+          undo();
+          return;
+        }
+
+        if ((key === "z" && e.shiftKey) || key === "y") {
+          e.preventDefault();
+          redo();
+          return;
+        }
+      });
+
+      window.addEventListener("wheel", e => {
+        e.preventDefault();
+        const dir = Math.sign(e.deltaY);
+        cellSize = dir > 0
+          ? Math.max(ZOOM_MIN_CELL, cellSize - ZOOM_STEP)
+          : Math.min(ZOOM_MAX_CELL, cellSize + ZOOM_STEP);
+        root.style.setProperty("--cell-size", cellSize + "px");
+        updateScaleVars(cellSize);
+      }, { passive: false });
+
+      themeRadios.forEach(radio => {
+        radio.addEventListener("change", () => {
+          if (radio.checked) {
+            applyTheme(radio.value);
+          }
+        });
+      });
+
+    })();
+  </script>
 </body>
 </html>
